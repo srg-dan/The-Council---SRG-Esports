@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   createUserWithEmailAndPassword,
+  getRedirectResult,
   onAuthStateChanged,
   sendEmailVerification,
   signInWithEmailAndPassword,
-  signInWithPopup,
   signOut,
   updateProfile,
 } from 'firebase/auth';
@@ -12,6 +12,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import {
   CalendarDays,
   Home,
+  LogOut,
   MailCheck,
   RefreshCw,
   Shield,
@@ -31,7 +32,7 @@ import { ProfileView } from './components/ProfileView.tsx';
 import { SuperadminView } from './components/SuperadminView.tsx';
 import { EVENTS_2027, HOUSES } from './data/aethermere.ts';
 import { SRG_LOGO_URL } from './data/media.ts';
-import { auth, googleProvider } from './firebase.ts';
+import { auth } from './firebase.ts';
 import {
   adminAwardEventPointsByMemberQr,
   bookEventTransaction,
@@ -223,10 +224,11 @@ export default function App() {
       }
       setAuthReady(true);
 
-      if (!profile.houseId || !profile.classId || !profile.phoneNumber) {
-        setOathWizardOpen(true);
-      } else if (adminFlag) {
+      if (adminFlag) {
+        setOathWizardOpen(false);
         setActiveTab((curr) => (curr === 'home' ? 'superadmin' : curr));
+      } else if (!profile.houseId || !profile.classId || !profile.phoneNumber) {
+        setOathWizardOpen(true);
       }
 
       unsubRef.current = subscribeCouncilData(firebaseUser.uid, {
@@ -277,29 +279,42 @@ export default function App() {
       }
     });
 
+    void getRedirectResult(auth)
+      .then((result) => {
+        if (active && result?.user) {
+          showToast(
+            `Welcome, ${result.user.displayName || 'Wanderer'}`,
+            'Connected to The Council Firestore ledger'
+          );
+        }
+      })
+      .catch((err) => {
+        if (active) {
+          showToast('Google Sign-In Notice', formatFirebaseAuthError(err));
+        }
+      });
+
     return () => {
       active = false;
       unsubAuth();
       if (unsubRef.current) unsubRef.current();
     };
-  }, [syncSignedInUser]);
+  }, [syncSignedInUser, showToast]);
 
   useEffect(() => {
     if (!authReady || !user) return;
     writeOfflineSnapshot({ houses, events, bookings });
   }, [authReady, user, houses, events, bookings]);
 
-  const handleGoogleAuth = async () => {
-    try {
-      const result = await signInWithPopup(auth, googleProvider);
+  const handleGoogleSuccess = useCallback(
+    (displayName: string | null) => {
       showToast(
-        `Welcome, ${result.user.displayName || 'Wanderer'}`,
+        `Welcome, ${displayName || 'Wanderer'}`,
         'Connected to The Council Firestore ledger'
       );
-    } catch (err) {
-      throw new Error(formatFirebaseAuthError(err));
-    }
-  };
+    },
+    [showToast]
+  );
 
   const handleEmailSignIn = async (email: string, password: string) => {
     try {
@@ -477,42 +492,126 @@ export default function App() {
     mobileLabel: string;
     icon: React.ComponentType<{ className?: string }>;
   }[] = [
-    { id: 'home', label: 'Home', mobileLabel: 'Home', icon: Home },
+    isAdmin
+      ? {
+          id: 'superadmin',
+          label: 'Superadmin',
+          mobileLabel: 'Superadmin',
+          icon: ShieldCheck,
+        }
+      : {
+          id: 'home',
+          label: 'Home',
+          mobileLabel: 'Home',
+          icon: Home,
+        },
     { id: 'houses', label: 'Houses', mobileLabel: 'Houses', icon: Shield },
     { id: 'events', label: 'Events', mobileLabel: 'Events', icon: CalendarDays },
     { id: 'leaderboard', label: 'Leaderboard', mobileLabel: 'Ranks', icon: Trophy },
     { id: 'profile', label: 'Profile', mobileLabel: 'Profile', icon: UserCircle2 },
-    ...(isAdmin
-      ? [
-          {
-            id: 'superadmin' as const,
-            label: 'Superadmin',
-            mobileLabel: 'Admin',
-            icon: ShieldCheck,
-          },
-        ]
-      : []),
   ];
 
   const isSplitSignInView = authReady && !needsEmailVerification && !user;
+  const resolvedTab: NavTab = isAdmin && activeTab === 'home' ? 'superadmin' : activeTab;
 
   return (
     <div
       className={`min-h-dvh bg-[#F6F6F8] dark:bg-[#121212] text-zinc-900 dark:text-[#F4F3F6] transition-colors ${
-        isSplitSignInView ? 'pb-0' : 'pb-24'
+        isSplitSignInView ? 'pb-0' : 'pb-24 md:pb-12'
       }`}
     >
+      {/* Desktop Top Header Navigation (hidden on mobile; mobile uses bottom navbar) */}
+      {user && !isSplitSignInView && (
+        <header className="hidden md:block sticky top-0 z-30 border-b border-zinc-200 dark:border-white/10 bg-white/95 dark:bg-[#121212]/95 backdrop-blur-md">
+          <div className="mx-auto max-w-6xl px-6 h-16 flex items-center justify-between gap-6">
+            {/* Zone 1: Brand Mark */}
+            <button
+              type="button"
+              onClick={() => setActiveTab(isAdmin ? 'superadmin' : 'home')}
+              className="flex items-center gap-3 text-left shrink-0 cursor-pointer"
+            >
+              <img
+                src={SRG_LOGO_URL}
+                alt="SRG Esports"
+                referrerPolicy="no-referrer"
+                className="h-9 w-9 object-contain"
+              />
+              <div>
+                <p className="font-display text-base font-bold leading-tight text-zinc-900 dark:text-white">
+                  The Council
+                </p>
+                <p className="text-[11px] leading-tight text-zinc-500 dark:text-zinc-400">
+                  SRG Esports
+                </p>
+              </div>
+            </button>
+
+            {/* Zone 2: Single-line Primary Navigation */}
+            <nav aria-label="Desktop Primary Navigation" className="flex items-center gap-1">
+              {navItems.map((item) => {
+                const Icon = item.icon;
+                const active = resolvedTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setActiveTab(item.id)}
+                    className={`inline-flex min-h-[40px] items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-semibold whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
+                      active
+                        ? 'bg-[#E31E24]/10 text-[#E31E24] dark:bg-[#E31E24]/20 dark:text-[#F7D117]'
+                        : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-white/5 hover:text-zinc-900 dark:hover:text-white'
+                    }`}
+                  >
+                    <Icon
+                      className={`h-4 w-4 ${
+                        active ? 'text-[#E31E24] dark:text-[#F7D117]' : ''
+                      }`}
+                    />
+                    <span>{item.label}</span>
+                  </button>
+                );
+              })}
+            </nav>
+
+            {/* Zone 3: Account & Sign Out */}
+            <div className="flex items-center gap-2.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => setActiveTab('profile')}
+                className="text-right pr-1 cursor-pointer group"
+              >
+                <p className="font-display text-xs font-bold text-zinc-900 dark:text-white group-hover:text-[#E31E24] dark:group-hover:text-[#F7D117] transition-colors">
+                  {user.displayName}
+                </p>
+                <p className="font-mono text-[11px] text-zinc-500 dark:text-zinc-400">
+                  @{user.username}
+                </p>
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleSignOut()}
+                aria-label="Sign out"
+                className="inline-flex min-h-[38px] items-center gap-1.5 rounded-xl border border-zinc-200 dark:border-white/12 px-3 text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:border-[#E31E24] hover:text-[#E31E24] dark:hover:text-[#F7D117] whitespace-nowrap shrink-0 cursor-pointer"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                <span>Sign Out</span>
+              </button>
+            </div>
+          </div>
+        </header>
+      )}
+
       {isSplitSignInView ? (
         <AuthGateModal
           isOpen={true}
           embedded={true}
           onClose={() => setAuthModalOpen(false)}
-          onGoogleAuth={handleGoogleAuth}
+          onGoogleSuccess={handleGoogleSuccess}
           onEmailSignIn={handleEmailSignIn}
           onEmailRegister={handleEmailRegister}
         />
       ) : (
-        <main className="mx-auto max-w-6xl px-4 sm:px-6 pt-5 md:pt-8">
+        <main className="mx-auto max-w-6xl px-4 sm:px-6 pt-5 md:pt-7">
           {!authReady ? (
             <div className="min-h-[75dvh] flex flex-col items-center justify-center gap-3">
               <img
@@ -570,7 +669,7 @@ export default function App() {
             </div>
           ) : user ? (
             <>
-              {activeTab === 'home' && (
+              {resolvedTab === 'home' && !isAdmin && (
                 <HomeView
                   user={user}
                   houses={houses}
@@ -587,7 +686,7 @@ export default function App() {
                 />
               )}
 
-              {activeTab === 'houses' && (
+              {resolvedTab === 'houses' && (
                 <HousesView
                   houses={houses}
                   events={events}
@@ -600,7 +699,7 @@ export default function App() {
                 />
               )}
 
-              {activeTab === 'events' && (
+              {resolvedTab === 'events' && (
                 <EventsView
                   events={events}
                   bookings={bookings}
@@ -616,7 +715,7 @@ export default function App() {
                 />
               )}
 
-              {activeTab === 'leaderboard' && (
+              {resolvedTab === 'leaderboard' && (
                 <LeaderboardView
                   houses={houses}
                   leaderboard={leaderboard}
@@ -624,7 +723,7 @@ export default function App() {
                 />
               )}
 
-              {activeTab === 'profile' && (
+              {resolvedTab === 'profile' && (
                 <ProfileView
                   user={user}
                   theme={theme}
@@ -636,7 +735,7 @@ export default function App() {
                 />
               )}
 
-              {activeTab === 'superadmin' && isAdmin && (
+              {resolvedTab === 'superadmin' && isAdmin && (
                 <SuperadminView
                   currentUser={user}
                   houses={houses}
@@ -649,39 +748,34 @@ export default function App() {
         </main>
       )}
 
-      {/* Bottom App-Style Navigation Bar (Mobile edge-to-edge & Desktop centered dock) */}
+      {/* Mobile-Only Bottom App-Style Navigation Bar */}
       {user && (
         <nav
-          aria-label="Primary Navigation"
-          className="fixed bottom-0 left-0 right-0 md:bottom-4 md:left-1/2 md:right-auto md:-translate-x-1/2 z-40 h-16 md:h-14 border-t md:border border-zinc-200 dark:border-white/10 bg-white/95 dark:bg-[#121212]/95 md:rounded-2xl md:px-3 md:shadow-2xl backdrop-blur-md pb-[env(safe-area-inset-bottom)] md:pb-0"
+          aria-label="Mobile Primary Navigation"
+          className="md:hidden fixed bottom-0 left-0 right-0 z-40 h-16 border-t border-zinc-200 dark:border-white/10 bg-white/95 dark:bg-[#121212]/95 backdrop-blur-md pb-[env(safe-area-inset-bottom)]"
         >
-          <div
-            className={`grid h-full items-center md:flex md:items-center md:gap-1 ${
-              isAdmin ? 'grid-cols-6' : 'grid-cols-5'
-            }`}
-          >
+          <div className="grid grid-cols-5 h-full items-center">
             {navItems.map((item) => {
               const Icon = item.icon;
-              const active = activeTab === item.id;
+              const active = resolvedTab === item.id;
               return (
                 <button
                   key={item.id}
                   type="button"
                   onClick={() => setActiveTab(item.id)}
-                  className={`flex min-h-[44px] flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 md:px-3.5 md:py-2 md:rounded-xl transition-colors cursor-pointer ${
+                  className={`flex min-h-[44px] flex-col items-center justify-center gap-0.5 transition-colors cursor-pointer ${
                     active
-                      ? 'text-[#E31E24] dark:text-[#F7D117] md:bg-[#E31E24]/10'
+                      ? 'text-[#E31E24] dark:text-[#F7D117]'
                       : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
                   }`}
                 >
                   <Icon
-                    className={`h-5 w-5 md:h-4 md:w-4 ${
+                    className={`h-5 w-5 ${
                       active ? 'text-[#E31E24] dark:text-[#F7D117]' : ''
                     }`}
                   />
-                  <span className="text-[10px] md:text-xs font-medium tracking-tight truncate max-w-full px-0.5">
-                    <span className="md:hidden">{item.mobileLabel}</span>
-                    <span className="hidden md:inline">{item.label}</span>
+                  <span className="text-[10px] font-medium tracking-tight truncate max-w-full px-0.5">
+                    {item.mobileLabel}
                   </span>
                 </button>
               );
@@ -701,7 +795,7 @@ export default function App() {
             transition={{ duration: 0.18 }}
             role="status"
             aria-live="polite"
-            className="fixed bottom-20 md:bottom-22 right-4 left-4 md:left-auto md:w-96 z-50 rounded-2xl border border-[#F7D117]/50 bg-white/95 dark:bg-[#18181E]/95 px-4 py-3.5 shadow-2xl backdrop-blur-md flex items-start gap-3"
+            className="fixed bottom-20 md:bottom-6 right-4 left-4 md:left-auto md:w-96 z-50 rounded-2xl border border-[#F7D117]/50 bg-white/95 dark:bg-[#18181E]/95 px-4 py-3.5 shadow-2xl backdrop-blur-md flex items-start gap-3"
           >
             <Sparkles className="h-5 w-5 shrink-0 text-[#E31E24] dark:text-[#F7D117] mt-0.5" />
             <div className="min-w-0">
@@ -723,13 +817,13 @@ export default function App() {
       <AuthGateModal
         isOpen={authModalOpen}
         onClose={() => setAuthModalOpen(false)}
-        onGoogleAuth={handleGoogleAuth}
+        onGoogleSuccess={handleGoogleSuccess}
         onEmailSignIn={handleEmailSignIn}
         onEmailRegister={handleEmailRegister}
       />
 
       <OathOnboardingWizard
-        isOpen={oathWizardOpen}
+        isOpen={oathWizardOpen && !isAdmin}
         user={user}
         onClose={() => setOathWizardOpen(false)}
         onComplete={handleCompleteOath}

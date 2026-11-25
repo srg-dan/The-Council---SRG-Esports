@@ -5,6 +5,7 @@ import {
   Check,
   Coins,
   Copy,
+  LayoutDashboard,
   Pencil,
   QrCode,
   RefreshCw,
@@ -35,6 +36,7 @@ import type {
   UserRole,
 } from '../types/council.ts';
 import { AvatarSigil, HouseCrest } from './CouncilIcons.tsx';
+import { SuperadminDashboard } from './SuperadminDashboard.tsx';
 
 interface SuperadminViewProps {
   currentUser: UserProfile;
@@ -43,7 +45,7 @@ interface SuperadminViewProps {
   onNotify: (title: string, subtitle?: string) => void;
 }
 
-type AdminSection = 'users' | 'events' | 'qr_award' | 'houses';
+type AdminSection = 'dashboard' | 'users' | 'events' | 'qr_award' | 'houses';
 
 const EMPTY_EVENT_FORM = {
   eventId: '',
@@ -65,7 +67,7 @@ export const SuperadminView: React.FC<SuperadminViewProps> = ({
   events,
   onNotify,
 }) => {
-  const [section, setSection] = useState<AdminSection>('users');
+  const [section, setSection] = useState<AdminSection>('dashboard');
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
   const [usersError, setUsersError] = useState<string | null>(null);
   const [userSearch, setUserSearch] = useState('');
@@ -347,6 +349,7 @@ export const SuperadminView: React.FC<SuperadminViewProps> = ({
         {/* Section Tabs */}
         <div className="mt-5 flex items-center gap-1.5 overflow-x-auto pb-1">
           {[
+            { id: 'dashboard' as const, label: 'Dashboard', icon: LayoutDashboard },
             { id: 'users' as const, label: 'Manage Users', icon: Users },
             { id: 'events' as const, label: 'Events & Points', icon: CalendarPlus },
             { id: 'qr_award' as const, label: 'QR Point Award', icon: QrCode },
@@ -372,6 +375,41 @@ export const SuperadminView: React.FC<SuperadminViewProps> = ({
           })}
         </div>
       </div>
+
+      {/* SECTION 0: EXECUTIVE DASHBOARD (DEFAULT) */}
+      {section === 'dashboard' && (
+        <SuperadminDashboard
+          allUsers={allUsers}
+          houses={houses}
+          events={events}
+          onCreateEvent={(prefillDate) => {
+            setEventForm({
+              ...EMPTY_EVENT_FORM,
+              date: prefillDate || EMPTY_EVENT_FORM.date,
+            });
+            setSection('events');
+          }}
+          onEditEvent={(evt) => {
+            setEventForm({
+              eventId: evt.eventId,
+              title: evt.title,
+              date: evt.date,
+              time: evt.time,
+              location: evt.location,
+              houseId: evt.houseId,
+              wardenName: WARDEN_OPTIONS.includes(evt.wardenName as (typeof WARDEN_OPTIONS)[number])
+                ? evt.wardenName
+                : WARDEN_OPTIONS[0],
+              description: evt.description,
+              capacity: evt.capacity,
+              basePriceRM: evt.basePriceRM,
+              checkInPoints: evt.checkInPoints,
+            });
+            setSection('events');
+          }}
+          onOpenEventQr={(evt) => setActiveEventQr(evt)}
+        />
+      )}
 
       {/* SECTION 1: MANAGE USERS */}
       {section === 'users' && (

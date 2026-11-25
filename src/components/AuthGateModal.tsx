@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { signInWithPopup, signInWithRedirect } from 'firebase/auth';
 import {
   ArrowRight,
   Eye,
@@ -10,6 +11,7 @@ import {
   X,
 } from 'lucide-react';
 import { SIGN_IN_HALF_URL, SRG_LOGO_URL } from '../data/media.ts';
+import { auth, googleProvider } from '../firebase.ts';
 import { normalizePhone, sanitizeUsername } from '../services/councilFirebase.ts';
 import { PhoneInputField } from './PhoneInputField.tsx';
 
@@ -25,7 +27,7 @@ interface AuthGateModalProps {
   isOpen: boolean;
   embedded?: boolean;
   onClose: () => void;
-  onGoogleAuth: () => Promise<void>;
+  onGoogleSuccess?: (displayName: string | null) => void;
   onEmailSignIn: (email: string, password: string) => Promise<void>;
   onEmailRegister: (payload: EmailRegistrationPayload) => Promise<void>;
 }
@@ -55,7 +57,7 @@ export const AuthGateModal: React.FC<AuthGateModalProps> = ({
   isOpen,
   embedded = false,
   onClose,
-  onGoogleAuth,
+  onGoogleSuccess,
   onEmailSignIn,
   onEmailRegister,
 }) => {
@@ -82,22 +84,44 @@ export const AuthGateModal: React.FC<AuthGateModalProps> = ({
     setShowPassword(false);
   };
 
-  const handleGoogleSignIn = async () => {
+  const handleGoogleSignIn = () => {
     setError(null);
     setNotice(null);
     setSubmitting(true);
-    try {
-      await onGoogleAuth();
-      if (!embedded) onClose();
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'Google Sign-In did not complete. Please allow the sign-in popup and try again.'
-      );
-    } finally {
-      setSubmitting(false);
-    }
+
+    // Call signInWithPopup directly inside the click handler with no async delays before it
+    signInWithPopup(auth, googleProvider)
+      .then((result) => {
+        onGoogleSuccess?.(result.user.displayName);
+        setSubmitting(false);
+        if (!embedded) onClose();
+      })
+      .catch((error: unknown) => {
+        const errorCode =
+          typeof error === 'object' && error !== null && 'code' in error
+            ? String((error as { code?: unknown }).code)
+            : '';
+
+        if (errorCode === 'auth/popup-blocked') {
+          setNotice('Popup was blocked by your browser. Redirecting to Google Sign-In...');
+          signInWithRedirect(auth, googleProvider).catch((redirectErr: unknown) => {
+            setError(
+              redirectErr instanceof Error
+                ? redirectErr.message
+                : 'Google Sign-In redirect failed. Please try again.'
+            );
+            setSubmitting(false);
+          });
+          return;
+        }
+
+        setError(
+          error instanceof Error
+            ? error.message
+            : 'Google Sign-In did not complete. Please try again.'
+        );
+        setSubmitting(false);
+      });
   };
 
   const handleFormSubmit = async (e: React.FormEvent) => {
