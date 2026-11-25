@@ -1,0 +1,833 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // =========================================================================
+    // PILLAR 1: GLOBAL SAFETY NET (Default Deny)
+    // =========================================================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // =========================================================================
+    // PILLAR 3: HARDENED GLOBAL PRIMITIVES
+    // =========================================================================
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidToken(token) {
+      return token is string && token.size() >= 6 && token.size() <= 40 && token.matches('^[A-Z0-9\\-]+$');
+    }
+
+    function isValidHouseEnum(h) {
+      return h in ['circuit', 'sigil', 'stride', 'reel', 'echo'];
+    }
+
+    function isValidClassEnum(c) {
+      return c in ['vanguard', 'scout', 'bard', 'sage', 'merchant'];
+    }
+
+    function isValidRank(r) {
+      return r in [
+        'Wanderer',
+        'Squire',
+        'Vanguard Knight',
+        'Warden\u2019s Guard',
+        'Councillor',
+        'Elder',
+        'Giant\u2019s Chosen'
+      ];
+    }
+
+    function isBootstrappedAdmin() {
+      return isVerified()
+        && request.auth.token.email == 'danial@srgesports.com';
+    }
+
+    function isAdmin() {
+      return isBootstrappedAdmin()
+        || (isVerified() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
+    }
+
+    function isWarden() {
+      return isAdmin()
+        || (isVerified()
+            && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['warden', 'superadmin']);
+    }
+
+    // =========================================================================
+    // PILLAR 2: VALIDATION BLUEPRINTS (Anti-Update-Gap)
+    // =========================================================================
+    function isValidUserProfile(data) {
+      return data.keys().hasAll([
+          'uid', 'displayName', 'username', 'email', 'phoneNumber',
+          'avatarId', 'photoDataUrl', 'bio', 'houseId', 'classId',
+          'tier', 'points', 'rank', 'role', 'memberQrId', 'themePreference',
+          'joinedAt', 'attendedEvents', 'completedQuestIds',
+          'referralCode', 'isGiantsChosen', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'uid', 'displayName', 'username', 'email', 'phoneNumber',
+          'avatarId', 'photoDataUrl', 'bio', 'houseId', 'classId',
+          'tier', 'points', 'rank', 'role', 'memberQrId', 'themePreference',
+          'joinedAt', 'attendedEvents', 'completedQuestIds',
+          'referralCode', 'isGiantsChosen', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.uid)
+        && data.displayName is string && data.displayName.size() >= 2 && data.displayName.size() <= 32
+        && data.username is string && data.username.size() >= 1 && data.username.size() <= 40
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 160
+        && data.phoneNumber is string && data.phoneNumber.size() <= 24
+        && data.avatarId in ['crest', 'knight', 'visor', 'tome', 'lyre', 'coin']
+        && data.photoDataUrl is string && data.photoDataUrl.size() <= 300000
+        && data.bio is string && data.bio.size() <= 140
+        && data.houseId in ['unpledged', 'circuit', 'sigil', 'stride', 'reel', 'echo']
+        && data.classId in ['unassigned', 'vanguard', 'scout', 'bard', 'sage', 'merchant']
+        && data.tier in ['free', 'diamond']
+        && data.points is int && data.points >= 0 && data.points <= 10000000
+        && isValidRank(data.rank)
+        && data.role in ['member', 'warden', 'superadmin']
+        && isValidToken(data.memberQrId)
+        && data.themePreference in ['dark', 'light']
+        && data.joinedAt is string && data.joinedAt.size() >= 10 && data.joinedAt.size() <= 40
+        && data.attendedEvents is list && data.attendedEvents.size() <= 50
+        && (data.attendedEvents.size() == 0 || (data.attendedEvents[0] is string && data.attendedEvents[0].size() <= 64))
+        && data.completedQuestIds is list && data.completedQuestIds.size() <= 50
+        && (data.completedQuestIds.size() == 0 || (data.completedQuestIds[0] is string && data.completedQuestIds[0].size() <= 64))
+        && data.referralCode is string && data.referralCode.size() >= 4 && data.referralCode.size() <= 24 && data.referralCode.matches('^[A-Z0-9\\-]+$')
+        && data.isGiantsChosen is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidLeaderboardMember(data) {
+      return data.keys().hasAll([
+          'uid', 'displayName', 'username', 'avatarId', 'photoDataUrl',
+          'houseId', 'classId', 'tier', 'points', 'rank', 'isPublic', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'uid', 'displayName', 'username', 'avatarId', 'photoDataUrl',
+          'houseId', 'classId', 'tier', 'points', 'rank', 'isPublic', 'updatedAt'
+        ])
+        && isValidId(data.uid)
+        && data.displayName is string && data.displayName.size() >= 2 && data.displayName.size() <= 32
+        && data.username is string && data.username.size() >= 1 && data.username.size() <= 40
+        && data.avatarId in ['crest', 'knight', 'visor', 'tome', 'lyre', 'coin']
+        && data.photoDataUrl is string && data.photoDataUrl.size() <= 300000
+        && isValidHouseEnum(data.houseId)
+        && isValidClassEnum(data.classId)
+        && data.tier in ['free', 'diamond']
+        && data.points is int && data.points >= 0 && data.points <= 10000000
+        && isValidRank(data.rank)
+        && data.isPublic is bool && data.isPublic == true
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidPhoneRegistry(data) {
+      return data.keys().hasAll(['phoneKey', 'phoneNumber', 'uid', 'createdAt'])
+        && data.keys().hasOnly(['phoneKey', 'phoneNumber', 'uid', 'createdAt'])
+        && isValidId(data.phoneKey) && data.phoneKey.size() >= 7 && data.phoneKey.size() <= 24
+        && data.phoneNumber is string && data.phoneNumber.size() >= 7 && data.phoneNumber.size() <= 24
+        && isValidId(data.uid)
+        && data.createdAt is timestamp;
+    }
+
+    function isValidMemberQrIndex(data) {
+      return data.keys().hasAll(['memberQrId', 'uid', 'username', 'displayName', 'createdAt'])
+        && data.keys().hasOnly(['memberQrId', 'uid', 'username', 'displayName', 'createdAt'])
+        && isValidToken(data.memberQrId)
+        && isValidId(data.uid)
+        && data.username is string && data.username.size() >= 1 && data.username.size() <= 40
+        && data.displayName is string && data.displayName.size() >= 2 && data.displayName.size() <= 32
+        && data.createdAt is timestamp;
+    }
+
+    function isValidHouse(data) {
+      return data.keys().hasAll([
+          'houseId', 'name', 'domain', 'wardenName', 'wardenTitle',
+          'wardenQuote', 'signatureActivation', 'description',
+          'totalPoints', 'memberCount', 'accentColor', 'rankDelta',
+          'isPublic', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'houseId', 'name', 'domain', 'wardenName', 'wardenTitle',
+          'wardenQuote', 'signatureActivation', 'description',
+          'totalPoints', 'memberCount', 'accentColor', 'rankDelta',
+          'isPublic', 'updatedAt'
+        ])
+        && isValidHouseEnum(data.houseId)
+        && data.name is string && data.name.size() >= 3 && data.name.size() <= 40
+        && data.domain is string && data.domain.size() >= 2 && data.domain.size() <= 32
+        && data.wardenName is string && data.wardenName.size() >= 2 && data.wardenName.size() <= 40
+        && data.wardenTitle is string && data.wardenTitle.size() >= 3 && data.wardenTitle.size() <= 64
+        && data.wardenQuote is string && data.wardenQuote.size() >= 5 && data.wardenQuote.size() <= 240
+        && data.signatureActivation is string && data.signatureActivation.size() >= 3 && data.signatureActivation.size() <= 120
+        && data.description is string && data.description.size() >= 10 && data.description.size() <= 400
+        && data.totalPoints is int && data.totalPoints >= 0 && data.totalPoints <= 100000000
+        && data.memberCount is int && data.memberCount >= 0 && data.memberCount <= 10000000
+        && data.accentColor is string && data.accentColor.size() >= 4 && data.accentColor.size() <= 16
+        && data.rankDelta is int && data.rankDelta >= -5 && data.rankDelta <= 5
+        && data.isPublic is bool && data.isPublic == true
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidQuest(data) {
+      return data.keys().hasAll([
+          'questId', 'title', 'description', 'classFilter',
+          'basePoints', 'type', 'expiresAt', 'verificationHint',
+          'isActive', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'questId', 'title', 'description', 'classFilter',
+          'basePoints', 'type', 'expiresAt', 'verificationHint',
+          'triviaQuestion', 'isActive', 'updatedAt'
+        ])
+        && isValidId(data.questId) && data.questId.size() <= 64
+        && data.title is string && data.title.size() >= 3 && data.title.size() <= 80
+        && data.description is string && data.description.size() >= 5 && data.description.size() <= 280
+        && data.classFilter in ['all', 'vanguard', 'scout', 'bard', 'sage', 'merchant']
+        && data.basePoints is int && data.basePoints >= 10 && data.basePoints <= 5000
+        && data.type in ['daily', 'weekly', 'one_time']
+        && data.expiresAt is string && data.expiresAt.size() >= 3 && data.expiresAt.size() <= 64
+        && data.verificationHint is string && data.verificationHint.size() >= 3 && data.verificationHint.size() <= 120
+        && (!('triviaQuestion' in data) || (
+          data.triviaQuestion is map
+          && data.triviaQuestion.keys().hasAll(['prompt', 'options', 'correctIndex'])
+          && data.triviaQuestion.keys().hasOnly(['prompt', 'options', 'correctIndex'])
+          && data.triviaQuestion.prompt is string && data.triviaQuestion.prompt.size() <= 240
+          && data.triviaQuestion.options is list && data.triviaQuestion.options.size() >= 2 && data.triviaQuestion.options.size() <= 6
+          && data.triviaQuestion.options[0] is string && data.triviaQuestion.options[0].size() <= 120
+          && data.triviaQuestion.correctIndex is int && data.triviaQuestion.correctIndex >= 0 && data.triviaQuestion.correctIndex < 6
+        ))
+        && data.isActive is bool
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidCouncilEvent(data) {
+      return data.keys().hasAll([
+          'eventId', 'title', 'month', 'monthIndex', 'date', 'time',
+          'location', 'houseId', 'wardenName', 'description',
+          'capacity', 'bookedCount', 'basePriceRM', 'diamondPriceRM',
+          'checkInPoints', 'isCrownEvent', 'mediaKey', 'seasonYear', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'eventId', 'title', 'month', 'monthIndex', 'date', 'time',
+          'location', 'houseId', 'wardenName', 'description',
+          'capacity', 'bookedCount', 'basePriceRM', 'diamondPriceRM',
+          'checkInPoints', 'isCrownEvent', 'mediaKey', 'eventQrId', 'seasonYear', 'updatedAt'
+        ])
+        && isValidId(data.eventId) && data.eventId.size() <= 64
+        && data.title is string && data.title.size() >= 3 && data.title.size() <= 100
+        && data.month is string && data.month.size() >= 3 && data.month.size() <= 12
+        && data.monthIndex is int && data.monthIndex >= 0 && data.monthIndex <= 11
+        && data.date is string && data.date.size() >= 8 && data.date.size() <= 20
+        && data.time is string && data.time.size() >= 4 && data.time.size() <= 40
+        && data.location is string && data.location.size() >= 3 && data.location.size() <= 120
+        && data.houseId in ['all', 'circuit', 'sigil', 'stride', 'reel', 'echo']
+        && data.wardenName is string && data.wardenName.size() >= 2 && data.wardenName.size() <= 60
+        && data.description is string && data.description.size() >= 10 && data.description.size() <= 360
+        && data.capacity is int && data.capacity >= 5 && data.capacity <= 10000
+        && data.bookedCount is int && data.bookedCount >= 0 && data.bookedCount <= data.capacity
+        && data.basePriceRM is int && data.basePriceRM >= 0 && data.basePriceRM <= 2000
+        && data.diamondPriceRM is int && data.diamondPriceRM >= 0 && data.diamondPriceRM <= data.basePriceRM
+        && data.checkInPoints is int && data.checkInPoints >= 10 && data.checkInPoints <= 5000
+        && data.isCrownEvent is bool
+        && data.mediaKey in ['arena', 'racing', 'hall']
+        && (!('eventQrId' in data) || isValidToken(data.eventQrId))
+        && data.seasonYear is int && data.seasonYear >= 2026 && data.seasonYear <= 2035
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidEventQrIndex(data) {
+      return data.keys().hasAll(['eventQrId', 'eventId', 'createdAt'])
+        && data.keys().hasOnly(['eventQrId', 'eventId', 'createdAt'])
+        && isValidToken(data.eventQrId)
+        && isValidId(data.eventId) && data.eventId.size() <= 64
+        && data.createdAt is timestamp;
+    }
+
+    function isValidEventBooking(data) {
+      return data.keys().hasAll([
+          'bookingId', 'eventId', 'userId', 'qrCodeToken',
+          'status', 'bookedAt', 'paidAmountRM', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'bookingId', 'eventId', 'userId', 'qrCodeToken',
+          'status', 'bookedAt', 'checkedInAt', 'paidAmountRM', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.bookingId) && data.bookingId.size() <= 192
+        && isValidId(data.eventId) && data.eventId.size() <= 64
+        && isValidId(data.userId)
+        && isValidToken(data.qrCodeToken)
+        && data.status in ['booked', 'checked_in', 'cancelled']
+        && data.bookedAt is string && data.bookedAt.size() >= 10 && data.bookedAt.size() <= 40
+        && (!('checkedInAt' in data) || (data.checkedInAt is string && data.checkedInAt.size() >= 10 && data.checkedInAt.size() <= 40))
+        && data.paidAmountRM is int && data.paidAmountRM >= 0 && data.paidAmountRM <= 2000
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidQrTicketLookup(data) {
+      return data.keys().hasAll(['qrCodeToken', 'bookingId', 'userId', 'eventId', 'createdAt'])
+        && data.keys().hasOnly(['qrCodeToken', 'bookingId', 'userId', 'eventId', 'createdAt'])
+        && isValidToken(data.qrCodeToken)
+        && isValidId(data.bookingId) && data.bookingId.size() <= 192
+        && isValidId(data.userId)
+        && isValidId(data.eventId) && data.eventId.size() <= 64
+        && data.createdAt is timestamp;
+    }
+
+    function isValidPointTransaction(data) {
+      return data.keys().hasAll([
+          'txId', 'userId', 'houseId', 'source', 'description',
+          'basePoints', 'multiplierApplied', 'finalPoints', 'timestamp', 'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'txId', 'userId', 'houseId', 'source', 'description',
+          'basePoints', 'multiplierApplied', 'finalPoints', 'timestamp', 'createdAt'
+        ])
+        && isValidId(data.txId) && data.txId.size() <= 64
+        && isValidId(data.userId)
+        && isValidHouseEnum(data.houseId)
+        && data.source in ['quest', 'event_checkin', 'referral', 'admin_award']
+        && data.description is string && data.description.size() >= 3 && data.description.size() <= 140
+        && data.basePoints is int && data.basePoints >= 1 && data.basePoints <= 5000
+        && (data.multiplierApplied == 1 || data.multiplierApplied == 1.25)
+        && data.finalPoints is int && data.finalPoints >= 1 && data.finalPoints <= 6250
+        && data.timestamp is string && data.timestamp.size() >= 10 && data.timestamp.size() <= 40
+        && data.createdAt is timestamp;
+    }
+
+    function isValidAdminRecord(data) {
+      return data.keys().hasAll(['uid', 'grantedAt'])
+        && data.keys().hasOnly(['uid', 'grantedAt'])
+        && isValidId(data.uid)
+        && data.grantedAt is timestamp;
+    }
+
+    // =========================================================================
+    // CONNECTION PROBE PATH
+    // =========================================================================
+    match /test/{docId} {
+      allow get: if docId == 'connection';
+      allow list, write: if false;
+    }
+
+    // =========================================================================
+    // ADMINS COLLECTION
+    // =========================================================================
+    match /admins/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if false;
+      allow create: if isAdmin()
+        && isValidId(userId)
+        && isValidAdminRecord(incoming())
+        && incoming().uid == userId
+        && incoming().grantedAt == request.time;
+      allow update: if false;
+      allow delete: if isAdmin() && isValidId(userId);
+    }
+
+    // =========================================================================
+    // USERS COLLECTION (PII ISOLATED; ADMIN LISTABLE FOR SUPERADMIN CONSOLE)
+    // =========================================================================
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (isOwner(userId) || isWarden() || isAdmin());
+      allow list: if isBootstrappedAdmin();
+
+      allow create: if isVerified()
+        && isValidId(userId)
+        && isOwner(userId)
+        && isValidUserProfile(incoming())
+        && incoming().uid == request.auth.uid
+        && request.auth.token.email is string
+        && incoming().email.lower() == request.auth.token.email.lower()
+        && incoming().points == 0
+        && incoming().rank == 'Wanderer'
+        && (incoming().role == 'member' || (incoming().role == 'superadmin' && isBootstrappedAdmin()))
+        && incoming().isGiantsChosen == false
+        && incoming().houseId == 'unpledged'
+        && incoming().classId == 'unassigned'
+        && incoming().attendedEvents.size() == 0
+        && incoming().completedQuestIds.size() == 0
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isVerified()
+        && isValidId(userId)
+        && isValidUserProfile(incoming())
+        && incoming().uid == existing().uid
+        && incoming().email == existing().email
+        && incoming().joinedAt == existing().joinedAt
+        && incoming().referralCode == existing().referralCode
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          // Action 1: Superadmin full override (manage users, points, roles, tier)
+          isAdmin()
+          || (
+            isOwner(userId)
+            && incoming().role == existing().role
+            && incoming().isGiantsChosen == existing().isGiantsChosen
+            && incoming().memberQrId == existing().memberQrId
+            && (
+              // Action 2: Complete Oath of the Red Giant (initial pledge + required phone/username)
+              (
+                existing().houseId == 'unpledged'
+                && isValidHouseEnum(incoming().houseId)
+                && isValidClassEnum(incoming().classId)
+                && incoming().phoneNumber.size() >= 7
+                && incoming().points >= existing().points
+                && incoming().points <= existing().points + 125
+                && incoming().diff(existing()).affectedKeys().hasOnly([
+                  'displayName', 'username', 'phoneNumber', 'avatarId', 'bio',
+                  'houseId', 'classId', 'points', 'rank', 'updatedAt'
+                ])
+              )
+              ||
+              // Action 3: Claim a Quest (+10..+250 pts, +1 unique completedQuestIds)
+              (
+                isValidHouseEnum(existing().houseId)
+                && incoming().points > existing().points
+                && incoming().points <= existing().points + 250
+                && incoming().completedQuestIds.size() == existing().completedQuestIds.size() + 1
+                && incoming().completedQuestIds.hasAll(existing().completedQuestIds)
+                && !(incoming().completedQuestIds[existing().completedQuestIds.size()] in existing().completedQuestIds)
+                && exists(/databases/$(database)/documents/quests/$(incoming().completedQuestIds[existing().completedQuestIds.size()]))
+                && incoming().diff(existing()).affectedKeys().hasOnly([
+                  'points', 'rank', 'completedQuestIds', 'updatedAt'
+                ])
+              )
+              ||
+              // Action 4: Switch Membership Tier
+              (
+                incoming().diff(existing()).affectedKeys().hasOnly(['tier', 'updatedAt'])
+              )
+              ||
+              // Action 5: Update profile details (displayName, username, phoneNumber, photoDataUrl, avatarId, bio, themePreference)
+              (
+                incoming().diff(existing()).affectedKeys().hasOnly([
+                  'displayName', 'username', 'phoneNumber', 'photoDataUrl',
+                  'avatarId', 'bio', 'themePreference', 'updatedAt'
+                ])
+              )
+              ||
+              // Action 7: Owner Event QR Scan Auto-Reward (unique event attendance + exact event points)
+              (
+                incoming().attendedEvents.size() == existing().attendedEvents.size() + 1
+                && incoming().attendedEvents.hasAll(existing().attendedEvents)
+                && !(incoming().attendedEvents[existing().attendedEvents.size()] in existing().attendedEvents)
+                && exists(/databases/$(database)/documents/events/$(incoming().attendedEvents[existing().attendedEvents.size()]))
+                && incoming().points == existing().points + get(/databases/$(database)/documents/events/$(incoming().attendedEvents[existing().attendedEvents.size()])).data.checkInPoints
+                && incoming().diff(existing()).affectedKeys().hasOnly([
+                  'points', 'rank', 'attendedEvents', 'updatedAt'
+                ])
+              )
+            )
+          )
+          || (
+            // Action 6: Warden Check-In Points & Attendance Award
+            isWarden()
+            && incoming().role == existing().role
+            && incoming().isGiantsChosen == existing().isGiantsChosen
+            && incoming().points >= existing().points
+            && incoming().points <= existing().points + 6250
+            && incoming().attendedEvents.size() >= existing().attendedEvents.size()
+            && incoming().attendedEvents.size() <= existing().attendedEvents.size() + 1
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'points', 'rank', 'attendedEvents', 'updatedAt'
+            ])
+          )
+        );
+
+      allow delete: if isAdmin() && isValidId(userId);
+    }
+
+    // =========================================================================
+    // PHONE REGISTRY (UNIQUE PHONE DEDUPLICATION)
+    // =========================================================================
+    match /phone_registry/{phoneKey} {
+      allow get: if isSignedIn() && isValidId(phoneKey);
+      allow list: if isBootstrappedAdmin();
+
+      allow create: if isVerified()
+        && isValidId(phoneKey)
+        && isValidPhoneRegistry(incoming())
+        && incoming().phoneKey == phoneKey
+        && incoming().createdAt == request.time
+        && (isAdmin() || incoming().uid == request.auth.uid);
+
+      allow update: if false;
+
+      allow delete: if isVerified() && isValidId(phoneKey) && (
+        isAdmin() || existing().uid == request.auth.uid
+      );
+    }
+
+    // =========================================================================
+    // MEMBER QR INDEX (O(1) CREW POINT COLLECTION)
+    // =========================================================================
+    match /member_qr_index/{memberQrId} {
+      allow get: if isSignedIn() && isValidToken(memberQrId) && (
+        existing().uid == request.auth.uid || isWarden() || isAdmin()
+      );
+      allow list: if false;
+
+      allow create: if isVerified()
+        && isValidToken(memberQrId)
+        && isValidMemberQrIndex(incoming())
+        && incoming().memberQrId == memberQrId
+        && incoming().createdAt == request.time
+        && (isAdmin() || incoming().uid == request.auth.uid);
+
+      allow update: if isVerified()
+        && isValidToken(memberQrId)
+        && isValidMemberQrIndex(incoming())
+        && incoming().memberQrId == existing().memberQrId
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && (isAdmin() || existing().uid == request.auth.uid);
+
+      allow delete: if isAdmin() && isValidToken(memberQrId);
+    }
+
+    // =========================================================================
+    // LEADERBOARD COLLECTION (REGISTERED MEMBERS ONLY, NO PII)
+    // =========================================================================
+    match /leaderboard/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (existing().isPublic == true || isOwner(userId) || isAdmin());
+      allow list: if isSignedIn() && existing().isPublic == true;
+
+      allow create: if isVerified()
+        && isValidId(userId)
+        && isValidLeaderboardMember(incoming())
+        && incoming().uid == userId
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || (
+            isOwner(userId)
+            && getAfter(/databases/$(database)/documents/users/$(userId)).data.points == incoming().points
+            && getAfter(/databases/$(database)/documents/users/$(userId)).data.houseId == incoming().houseId
+            && getAfter(/databases/$(database)/documents/users/$(userId)).data.classId == incoming().classId
+          )
+        );
+
+      allow update: if isVerified()
+        && isValidId(userId)
+        && isValidLeaderboardMember(incoming())
+        && incoming().uid == existing().uid
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || (
+            (isOwner(userId) || isWarden())
+            && getAfter(/databases/$(database)/documents/users/$(userId)).data.points == incoming().points
+            && getAfter(/databases/$(database)/documents/users/$(userId)).data.houseId == incoming().houseId
+            && getAfter(/databases/$(database)/documents/users/$(userId)).data.classId == incoming().classId
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'displayName', 'username', 'avatarId', 'photoDataUrl',
+              'houseId', 'classId', 'tier', 'points', 'rank', 'updatedAt'
+            ])
+          )
+        );
+
+      allow delete: if isAdmin() && isValidId(userId);
+    }
+
+    // =========================================================================
+    // HOUSES COLLECTION (FIVE HOUSES OF AETHERMERE)
+    // =========================================================================
+    match /houses/{houseId} {
+      allow get: if isSignedIn() && isValidId(houseId) && existing().isPublic == true;
+      allow list: if isSignedIn() && existing().isPublic == true;
+
+      allow create: if isVerified()
+        && isValidId(houseId)
+        && isValidHouse(incoming())
+        && incoming().houseId == houseId
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || (
+            houseId in ['circuit', 'sigil', 'stride', 'reel', 'echo']
+            && incoming().totalPoints == 0
+            && incoming().memberCount == 0
+          )
+        );
+
+      allow update: if isVerified()
+        && isValidId(houseId)
+        && isValidHouse(incoming())
+        && incoming().houseId == existing().houseId
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || (
+            incoming().totalPoints >= existing().totalPoints
+            && incoming().totalPoints <= existing().totalPoints + 6250
+            && incoming().memberCount >= existing().memberCount
+            && incoming().memberCount <= existing().memberCount + 1
+            && (
+              isWarden()
+              || getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.points
+                 > get(/databases/$(database)/documents/users/$(request.auth.uid)).data.points
+            )
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'totalPoints', 'memberCount', 'updatedAt'
+            ])
+          )
+        );
+
+      allow delete: if isAdmin() && isValidId(houseId);
+    }
+
+    // =========================================================================
+    // QUESTS COLLECTION
+    // =========================================================================
+    match /quests/{questId} {
+      allow get: if isSignedIn() && isValidId(questId) && existing().isActive == true;
+      allow list: if isSignedIn() && existing().isActive == true;
+
+      allow create: if isVerified()
+        && isValidId(questId)
+        && isValidQuest(incoming())
+        && incoming().questId == questId
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || (
+            questId in [
+              'q-daily-checkin', 'q-sage-trivia', 'q-vanguard-sim',
+              'q-scout-rsvp', 'q-bard-recap', 'q-merchant-relic',
+              'q-all-oath-referral', 'q-all-draft-predict'
+            ]
+            && incoming().basePoints <= 250
+          )
+        );
+
+      allow update: if isAdmin()
+        && isValidId(questId)
+        && isValidQuest(incoming())
+        && incoming().questId == existing().questId
+        && incoming().updatedAt == request.time;
+
+      allow delete: if isAdmin() && isValidId(questId);
+    }
+
+    // =========================================================================
+    // EVENTS COLLECTION (2027 CALENDAR & SUPERADMIN CREATED EVENTS)
+    // =========================================================================
+    match /events/{eventId} {
+      allow get: if isSignedIn() && isValidId(eventId) && existing().seasonYear >= 2026;
+      allow list: if isSignedIn() && existing().seasonYear >= 2026;
+
+      allow create: if isVerified()
+        && isValidId(eventId)
+        && isValidCouncilEvent(incoming())
+        && incoming().eventId == eventId
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || (
+            eventId.matches('^evt-2027-(0[1-9]|1[0-2])$')
+            && incoming().bookedCount == 0
+          )
+        );
+
+      allow update: if isVerified()
+        && isValidId(eventId)
+        && isValidCouncilEvent(incoming())
+        && incoming().eventId == existing().eventId
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || (
+            incoming().bookedCount == existing().bookedCount + 1
+            && incoming().bookedCount <= existing().capacity
+            && getAfter(/databases/$(database)/documents/bookings/$(request.auth.uid + '_' + eventId)).data.status == 'booked'
+            && getAfter(/databases/$(database)/documents/bookings/$(request.auth.uid + '_' + eventId)).data.updatedAt == request.time
+            && incoming().diff(existing()).affectedKeys().hasOnly(['bookedCount', 'updatedAt'])
+          )
+          || (
+            !('eventQrId' in existing())
+            && eventId.matches('^evt-2027-(0[1-9]|1[0-2])$')
+            && 'eventQrId' in incoming()
+            && isValidToken(incoming().eventQrId)
+            && incoming().diff(existing()).affectedKeys().hasOnly(['eventQrId', 'updatedAt'])
+          )
+        );
+
+      allow delete: if isAdmin() && isValidId(eventId);
+    }
+
+    // =========================================================================
+    // EVENT QR INDEX (UNIQUE EVENT QR AUTO-REWARD LOOKUP)
+    // =========================================================================
+    match /event_qr_index/{eventQrId} {
+      allow get: if isSignedIn() && isValidToken(eventQrId);
+      allow list: if false;
+
+      allow create: if isVerified()
+        && isValidToken(eventQrId)
+        && isValidEventQrIndex(incoming())
+        && incoming().eventQrId == eventQrId
+        && incoming().createdAt == request.time
+        && (
+          isAdmin()
+          || incoming().eventId.matches('^evt-2027-(0[1-9]|1[0-2])$')
+        );
+
+      allow update: if isAdmin()
+        && isValidToken(eventQrId)
+        && isValidEventQrIndex(incoming())
+        && incoming().eventQrId == existing().eventQrId
+        && incoming().createdAt == existing().createdAt;
+
+      allow delete: if isAdmin() && isValidToken(eventQrId);
+    }
+
+    // =========================================================================
+    // BOOKINGS COLLECTION
+    // =========================================================================
+    match /bookings/{bookingId} {
+      allow get: if isSignedIn() && isValidId(bookingId) && (
+        existing().userId == request.auth.uid || isWarden() || isAdmin()
+      );
+      allow list: if isSignedIn() && (
+        existing().userId == request.auth.uid || isBootstrappedAdmin()
+      );
+
+      allow create: if isVerified()
+        && isValidId(bookingId)
+        && isValidEventBooking(incoming())
+        && incoming().bookingId == bookingId
+        && bookingId == request.auth.uid + '_' + incoming().eventId
+        && incoming().userId == request.auth.uid
+        && incoming().status == 'booked'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && !('checkedInAt' in incoming())
+        && exists(/databases/$(database)/documents/events/$(incoming().eventId))
+        && exists(/databases/$(database)/documents/users/$(incoming().userId))
+        && existsAfter(/databases/$(database)/documents/qr_tickets/$(incoming().qrCodeToken))
+        && getAfter(/databases/$(database)/documents/events/$(incoming().eventId)).data.bookedCount
+           == get(/databases/$(database)/documents/events/$(incoming().eventId)).data.bookedCount + 1;
+
+      allow update: if isVerified()
+        && isValidId(bookingId)
+        && isValidEventBooking(incoming())
+        && incoming().bookingId == existing().bookingId
+        && incoming().eventId == existing().eventId
+        && incoming().userId == existing().userId
+        && incoming().qrCodeToken == existing().qrCodeToken
+        && incoming().bookedAt == existing().bookedAt
+        && incoming().paidAmountRM == existing().paidAmountRM
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || (
+            existing().status == 'booked'
+            && (
+              (
+                isWarden()
+                && incoming().status == 'checked_in'
+                && 'checkedInAt' in incoming()
+                && incoming().diff(existing()).affectedKeys().hasOnly([
+                  'status', 'checkedInAt', 'updatedAt'
+                ])
+              )
+              ||
+              (
+                isOwner(existing().userId)
+                && incoming().status == 'cancelled'
+                && incoming().diff(existing()).affectedKeys().hasOnly([
+                  'status', 'updatedAt'
+                ])
+              )
+            )
+          )
+        );
+
+      allow delete: if isAdmin() && isValidId(bookingId);
+    }
+
+    // =========================================================================
+    // QR TICKET LOOKUP INDEX
+    // =========================================================================
+    match /qr_tickets/{qrCodeToken} {
+      allow get: if isSignedIn() && isValidToken(qrCodeToken) && (
+        existing().userId == request.auth.uid || isWarden() || isAdmin()
+      );
+      allow list: if false;
+
+      allow create: if isVerified()
+        && isValidToken(qrCodeToken)
+        && isValidQrTicketLookup(incoming())
+        && incoming().qrCodeToken == qrCodeToken
+        && incoming().userId == request.auth.uid
+        && incoming().createdAt == request.time
+        && existsAfter(/databases/$(database)/documents/bookings/$(incoming().bookingId));
+
+      allow update: if false;
+      allow delete: if isAdmin() && isValidToken(qrCodeToken);
+    }
+
+    // =========================================================================
+    // POINT TRANSACTIONS LEDGER
+    // =========================================================================
+    match /point_transactions/{txId} {
+      allow get: if isSignedIn() && isValidId(txId) && (
+        existing().userId == request.auth.uid || isWarden() || isAdmin()
+      );
+      allow list: if isSignedIn() && (
+        existing().userId == request.auth.uid || isBootstrappedAdmin()
+      );
+
+      allow create: if isVerified()
+        && isValidId(txId)
+        && isValidPointTransaction(incoming())
+        && incoming().txId == txId
+        && incoming().createdAt == request.time
+        && exists(/databases/$(database)/documents/users/$(incoming().userId))
+        && exists(/databases/$(database)/documents/houses/$(incoming().houseId))
+        && (
+          isAdmin()
+          || (
+            getAfter(/databases/$(database)/documents/users/$(incoming().userId)).data.points
+              >= get(/databases/$(database)/documents/users/$(incoming().userId)).data.points + incoming().finalPoints
+            && (
+              incoming().userId == request.auth.uid
+              || (isWarden() && incoming().source == 'event_checkin')
+            )
+          )
+        );
+
+      allow update, delete: if false;
+    }
+  }
+}

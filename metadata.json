@@ -1,0 +1,6 @@
+{
+  "name": "The Council — SRG Esports",
+  "description": "Official Fan Club PWA for Selangor Red Giants Esports. Take the Oath of the Red Giant, pledge to a House in Aethermere, complete quests, and unlock 2027 Klang Valley activations.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

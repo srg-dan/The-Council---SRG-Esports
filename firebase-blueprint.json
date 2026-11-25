@@ -1,0 +1,765 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Private authenticated member record for The Council (contains PII email and phoneNumber).",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 32
+        },
+        "username": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 160
+        },
+        "phoneNumber": {
+          "type": "string",
+          "maxLength": 24
+        },
+        "avatarId": {
+          "type": "string",
+          "maxLength": 24,
+          "enum": ["crest", "knight", "visor", "tome", "lyre", "coin"]
+        },
+        "photoDataUrl": {
+          "type": "string",
+          "maxLength": 300000
+        },
+        "bio": {
+          "type": "string",
+          "maxLength": 140
+        },
+        "houseId": {
+          "type": "string",
+          "maxLength": 20,
+          "enum": ["unpledged", "circuit", "sigil", "stride", "reel", "echo"]
+        },
+        "classId": {
+          "type": "string",
+          "maxLength": 20,
+          "enum": ["unassigned", "vanguard", "scout", "bard", "sage", "merchant"]
+        },
+        "tier": {
+          "type": "string",
+          "enum": ["free", "diamond"]
+        },
+        "points": {
+          "type": "integer"
+        },
+        "rank": {
+          "type": "string",
+          "maxLength": 32,
+          "enum": [
+            "Wanderer",
+            "Squire",
+            "Vanguard Knight",
+            "Warden’s Guard",
+            "Councillor",
+            "Elder",
+            "Giant’s Chosen"
+          ]
+        },
+        "role": {
+          "type": "string",
+          "enum": ["member", "warden", "superadmin"]
+        },
+        "memberQrId": {
+          "type": "string",
+          "minLength": 6,
+          "maxLength": 40,
+          "pattern": "^[A-Z0-9\\-]+$"
+        },
+        "themePreference": {
+          "type": "string",
+          "enum": ["dark", "light"]
+        },
+        "joinedAt": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "attendedEvents": {
+          "type": "array"
+        },
+        "completedQuestIds": {
+          "type": "array"
+        },
+        "referralCode": {
+          "type": "string",
+          "maxLength": 24,
+          "pattern": "^[A-Z0-9\\-]+$"
+        },
+        "isGiantsChosen": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "uid",
+        "displayName",
+        "username",
+        "email",
+        "phoneNumber",
+        "avatarId",
+        "photoDataUrl",
+        "bio",
+        "houseId",
+        "classId",
+        "tier",
+        "points",
+        "rank",
+        "role",
+        "memberQrId",
+        "themePreference",
+        "joinedAt",
+        "attendedEvents",
+        "completedQuestIds",
+        "referralCode",
+        "isGiantsChosen",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "LeaderboardMember": {
+      "title": "LeaderboardMember",
+      "description": "Public non-PII standing entry for registered Firebase members.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 32
+        },
+        "username": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "avatarId": {
+          "type": "string",
+          "maxLength": 24,
+          "enum": ["crest", "knight", "visor", "tome", "lyre", "coin"]
+        },
+        "photoDataUrl": {
+          "type": "string",
+          "maxLength": 300000
+        },
+        "houseId": {
+          "type": "string",
+          "enum": ["circuit", "sigil", "stride", "reel", "echo"]
+        },
+        "classId": {
+          "type": "string",
+          "enum": ["vanguard", "scout", "bard", "sage", "merchant"]
+        },
+        "tier": {
+          "type": "string",
+          "enum": ["free", "diamond"]
+        },
+        "points": {
+          "type": "integer"
+        },
+        "rank": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "isPublic": {
+          "type": "boolean"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "uid",
+        "displayName",
+        "username",
+        "avatarId",
+        "photoDataUrl",
+        "houseId",
+        "classId",
+        "tier",
+        "points",
+        "rank",
+        "isPublic",
+        "updatedAt"
+      ]
+    },
+    "PhoneRegistry": {
+      "title": "PhoneRegistry",
+      "description": "Anti-fraud unique phone number index preventing duplicate account registrations.",
+      "type": "object",
+      "properties": {
+        "phoneKey": {
+          "type": "string",
+          "minLength": 7,
+          "maxLength": 24,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "phoneNumber": {
+          "type": "string",
+          "minLength": 7,
+          "maxLength": 24
+        },
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["phoneKey", "phoneNumber", "uid", "createdAt"]
+    },
+    "MemberQrIndex": {
+      "title": "MemberQrIndex",
+      "description": "O(1) lookup mapping a member's unique QR ID to their uid for event crew check-in point awards.",
+      "type": "object",
+      "properties": {
+        "memberQrId": {
+          "type": "string",
+          "minLength": 6,
+          "maxLength": 40,
+          "pattern": "^[A-Z0-9\\-]+$"
+        },
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "username": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 32
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["memberQrId", "uid", "username", "displayName", "createdAt"]
+    },
+    "House": {
+      "title": "House",
+      "description": "One of the Five Houses of Aethermere competing for the Crown Banner.",
+      "type": "object",
+      "properties": {
+        "houseId": {
+          "type": "string",
+          "enum": ["circuit", "sigil", "stride", "reel", "echo"]
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "domain": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "wardenName": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "wardenTitle": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "wardenQuote": {
+          "type": "string",
+          "maxLength": 240
+        },
+        "signatureActivation": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 400
+        },
+        "totalPoints": {
+          "type": "integer"
+        },
+        "memberCount": {
+          "type": "integer"
+        },
+        "accentColor": {
+          "type": "string",
+          "maxLength": 16
+        },
+        "rankDelta": {
+          "type": "integer"
+        },
+        "isPublic": {
+          "type": "boolean"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "houseId",
+        "name",
+        "domain",
+        "wardenName",
+        "wardenTitle",
+        "wardenQuote",
+        "signatureActivation",
+        "description",
+        "totalPoints",
+        "memberCount",
+        "accentColor",
+        "rankDelta",
+        "isPublic",
+        "updatedAt"
+      ]
+    },
+    "Quest": {
+      "title": "Quest",
+      "description": "Weekly, daily, or seasonal Council quest definition.",
+      "type": "object",
+      "properties": {
+        "questId": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 280
+        },
+        "classFilter": {
+          "type": "string",
+          "enum": ["all", "vanguard", "scout", "bard", "sage", "merchant"]
+        },
+        "basePoints": {
+          "type": "integer"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["daily", "weekly", "one_time"]
+        },
+        "expiresAt": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "verificationHint": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "triviaQuestion": {
+          "type": "object"
+        },
+        "isActive": {
+          "type": "boolean"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "questId",
+        "title",
+        "description",
+        "classFilter",
+        "basePoints",
+        "type",
+        "expiresAt",
+        "verificationHint",
+        "isActive",
+        "updatedAt"
+      ]
+    },
+    "CouncilEvent": {
+      "title": "CouncilEvent",
+      "description": "Monthly activation event created in calendar or by Superadmin.",
+      "type": "object",
+      "properties": {
+        "eventId": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "month": {
+          "type": "string",
+          "maxLength": 12
+        },
+        "monthIndex": {
+          "type": "integer"
+        },
+        "date": {
+          "type": "string",
+          "maxLength": 20
+        },
+        "time": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "location": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "houseId": {
+          "type": "string",
+          "enum": ["all", "circuit", "sigil", "stride", "reel", "echo"]
+        },
+        "wardenName": {
+          "type": "string",
+          "maxLength": 60
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 360
+        },
+        "capacity": {
+          "type": "integer"
+        },
+        "bookedCount": {
+          "type": "integer"
+        },
+        "basePriceRM": {
+          "type": "integer"
+        },
+        "diamondPriceRM": {
+          "type": "integer"
+        },
+        "checkInPoints": {
+          "type": "integer"
+        },
+        "isCrownEvent": {
+          "type": "boolean"
+        },
+        "mediaKey": {
+          "type": "string",
+          "enum": ["arena", "racing", "hall"]
+        },
+        "eventQrId": {
+          "type": "string",
+          "minLength": 6,
+          "maxLength": 40,
+          "pattern": "^[A-Z0-9\\-]+$"
+        },
+        "seasonYear": {
+          "type": "integer"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "eventId",
+        "title",
+        "month",
+        "monthIndex",
+        "date",
+        "time",
+        "location",
+        "houseId",
+        "wardenName",
+        "description",
+        "capacity",
+        "bookedCount",
+        "basePriceRM",
+        "diamondPriceRM",
+        "checkInPoints",
+        "isCrownEvent",
+        "mediaKey",
+        "seasonYear",
+        "updatedAt"
+      ]
+    },
+    "EventQrIndex": {
+      "title": "EventQrIndex",
+      "description": "O(1) lookup mapping an Event QR ID to its eventId for automatic member point awards.",
+      "type": "object",
+      "properties": {
+        "eventQrId": {
+          "type": "string",
+          "minLength": 6,
+          "maxLength": 40,
+          "pattern": "^[A-Z0-9\\-]+$"
+        },
+        "eventId": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["eventQrId", "eventId", "createdAt"]
+    },
+    "EventBooking": {
+      "title": "EventBooking",
+      "description": "Member RSVP and QR pass for a Council activation.",
+      "type": "object",
+      "properties": {
+        "bookingId": {
+          "type": "string",
+          "maxLength": 192,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "eventId": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "qrCodeToken": {
+          "type": "string",
+          "maxLength": 40,
+          "pattern": "^[A-Z0-9\\-]+$"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["booked", "checked_in", "cancelled"]
+        },
+        "bookedAt": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "checkedInAt": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "paidAmountRM": {
+          "type": "integer"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "bookingId",
+        "eventId",
+        "userId",
+        "qrCodeToken",
+        "status",
+        "bookedAt",
+        "paidAmountRM",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "QrTicketLookup": {
+      "title": "QrTicketLookup",
+      "description": "No-PII O(1) lookup mapping QR pass token to bookingId for Warden check-ins.",
+      "type": "object",
+      "properties": {
+        "qrCodeToken": {
+          "type": "string",
+          "maxLength": 40,
+          "pattern": "^[A-Z0-9\\-]+$"
+        },
+        "bookingId": {
+          "type": "string",
+          "maxLength": 192,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "eventId": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "qrCodeToken",
+        "bookingId",
+        "userId",
+        "eventId",
+        "createdAt"
+      ]
+    },
+    "PointTransaction": {
+      "title": "PointTransaction",
+      "description": "Immutable ledger entry recording points awarded to a member and House.",
+      "type": "object",
+      "properties": {
+        "txId": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "houseId": {
+          "type": "string",
+          "enum": ["circuit", "sigil", "stride", "reel", "echo"]
+        },
+        "source": {
+          "type": "string",
+          "enum": ["quest", "event_checkin", "referral", "admin_award"]
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 140
+        },
+        "basePoints": {
+          "type": "integer"
+        },
+        "multiplierApplied": {
+          "type": "number"
+        },
+        "finalPoints": {
+          "type": "integer"
+        },
+        "timestamp": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "txId",
+        "userId",
+        "houseId",
+        "source",
+        "description",
+        "basePoints",
+        "multiplierApplied",
+        "finalPoints",
+        "timestamp",
+        "createdAt"
+      ]
+    },
+    "AdminRecord": {
+      "title": "AdminRecord",
+      "description": "Privileged Council administrator role marker.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "grantedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "grantedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Private member profile documents containing PII email and phoneNumber."
+    },
+    "/leaderboard/{userId}": {
+      "schema": { "$ref": "#/entities/LeaderboardMember" },
+      "description": "Public non-PII individual standings for registered Firebase members."
+    },
+    "/phone_registry/{phoneKey}": {
+      "schema": { "$ref": "#/entities/PhoneRegistry" },
+      "description": "Unique phone number deduplication registry preventing fraud and multi-account abuse."
+    },
+    "/member_qr_index/{memberQrId}": {
+      "schema": { "$ref": "#/entities/MemberQrIndex" },
+      "description": "Unique member QR code index for event crew point collection."
+    },
+    "/events/{eventId}": {
+      "schema": { "$ref": "#/entities/CouncilEvent" },
+      "description": "Activation calendar events."
+    },
+    "/event_qr_index/{eventQrId}": {
+      "schema": { "$ref": "#/entities/EventQrIndex" },
+      "description": "O(1) event QR code lookup index for self-scan automatic point award."
+    },
+    "/houses/{houseId}": {
+      "schema": { "$ref": "#/entities/House" },
+      "description": "Five Houses of Aethermere with pooled points and member counts."
+    },
+    "/quests/{questId}": {
+      "schema": { "$ref": "#/entities/Quest" },
+      "description": "Active daily, weekly, and seasonal Council quests."
+    },
+    "/bookings/{bookingId}": {
+      "schema": { "$ref": "#/entities/EventBooking" },
+      "description": "Member activation RSVPs and check-in states."
+    },
+    "/qr_tickets/{qrCodeToken}": {
+      "schema": { "$ref": "#/entities/QrTicketLookup" },
+      "description": "O(1) non-PII QR ticket token index for Warden check-in verification."
+    },
+    "/point_transactions/{txId}": {
+      "schema": { "$ref": "#/entities/PointTransaction" },
+      "description": "Immutable point award audit ledger."
+    },
+    "/admins/{userId}": {
+      "schema": { "$ref": "#/entities/AdminRecord" },
+      "description": "Trusted Council admin registry."
+    }
+  }
+}
