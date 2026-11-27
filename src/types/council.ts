@@ -153,3 +153,22 @@ export interface CountryCodeOption {
   country: string;
   flag: string;
 }
+
+export interface LiveChatMessage {
+  messageId: string;
+  uid: string;
+  displayName: string;
+  username: string;
+  avatarId: string;
+  photoDataUrl: string;
+  houseId: HouseId | 'unpledged';
+  role: UserRole;
+  text: string;
+  replyToId?: string;
+  replyToName?: string;
+  replyToSnippet?: string;
+  likedByUids: string[];
+  sentAtIso: string;
+  isPublic?: boolean;
+}
+

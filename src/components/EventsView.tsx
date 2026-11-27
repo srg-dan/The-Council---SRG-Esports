@@ -361,17 +361,19 @@ export const EventsView: React.FC<EventsViewProps> = ({
             </button>
           </div>
 
-          <button
-            type="button"
-            onClick={() => {
-              setEventQrStatus(null);
-              setShowEventQrModal(true);
-            }}
-            className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl bg-[#E31E24] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#C8102E] cursor-pointer whitespace-nowrap"
-          >
-            <QrCode className="h-4 w-4" />
-            <span>Scan Event QR</span>
-          </button>
+          {user && (
+            <button
+              type="button"
+              onClick={() => {
+                setEventQrStatus(null);
+                setShowEventQrModal(true);
+              }}
+              className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl bg-[#E31E24] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#C8102E] cursor-pointer whitespace-nowrap"
+            >
+              <QrCode className="h-4 w-4" />
+              <span>Scan Event QR</span>
+            </button>
+          )}
 
           {hasScannerAccess && (
             <button
@@ -561,7 +563,7 @@ export const EventsView: React.FC<EventsViewProps> = ({
                         </span>
                       </>
                     ) : (
-                      <span>Book Seat</span>
+                      <span>{user ? 'Book Seat' : 'View Details'}</span>
                     )}
                   </button>
                 </div>

@@ -33,6 +33,7 @@ import type {
   House,
   HouseId,
   LeaderboardMember,
+  LiveChatMessage,
   MembershipTier,
   PointTransaction,
   Quest,
@@ -575,6 +576,79 @@ export function subscribeCouncilData(uid: string, handlers: CouncilSubscriptions
     unsubLeaderboard();
     unsubBookings();
     unsubTx();
+  };
+}
+
+export function subscribePublicCouncilData(handlers: {
+  onHouses: (houses: House[]) => void;
+  onEvents: (events: CouncilEvent[]) => void;
+  onLeaderboard: (members: LeaderboardMember[]) => void;
+}): () => void {
+  const unsubHouses = onSnapshot(
+    query(collection(db, 'houses'), where('isPublic', '==', true)),
+    (snap) => {
+      if (snap.empty) {
+        handlers.onHouses(HOUSES);
+        return;
+      }
+      const list = snap.docs.map((d) => d.data() as House);
+      handlers.onHouses(list);
+    },
+    () => {
+      handlers.onHouses(HOUSES);
+    }
+  );
+
+  const unsubEvents = onSnapshot(
+    query(collection(db, 'events'), where('seasonYear', '>=', 2026)),
+    (snap) => {
+      if (snap.empty) {
+        handlers.onEvents(EVENTS_2027);
+        return;
+      }
+      const list = snap.docs
+        .map((d) => d.data() as CouncilEvent)
+        .sort((a, b) => a.date.localeCompare(b.date) || a.monthIndex - b.monthIndex);
+      handlers.onEvents(list);
+    },
+    () => {
+      handlers.onEvents(EVENTS_2027);
+    }
+  );
+
+  const unsubLeaderboard = onSnapshot(
+    query(collection(db, 'leaderboard'), where('isPublic', '==', true)),
+    (snap) => {
+      const registered: LeaderboardMember[] = snap.docs
+        .filter((d) => !d.id.startsWith('seed-'))
+        .map((d) => {
+          const data = d.data();
+          return {
+            uid: String(data.uid ?? d.id),
+            displayName: String(data.displayName ?? 'Wanderer'),
+            username: sanitizeUsername(String(data.username ?? data.displayName ?? 'wanderer')),
+            avatarId: String(data.avatarId ?? 'crest'),
+            photoDataUrl: String(data.photoDataUrl ?? ''),
+            houseId: data.houseId as HouseId,
+            classId: data.classId as ClassId,
+            tier: (data.tier === 'diamond' ? 'diamond' : 'free') as MembershipTier,
+            points: typeof data.points === 'number' ? data.points : 0,
+            rank: (data.rank as RankTitle) || 'Wanderer',
+            isPublic: true,
+          };
+        })
+        .sort((a, b) => b.points - a.points);
+      handlers.onLeaderboard(registered);
+    },
+    () => {
+      handlers.onLeaderboard([]);
+    }
+  );
+
+  return () => {
+    unsubHouses();
+    unsubEvents();
+    unsubLeaderboard();
   };
 }
 
@@ -1854,3 +1928,144 @@ export async function claimEventQrTransaction(
     handleFirestoreError(error, OperationType.WRITE, userRef.path);
   }
 }
+
+export function subscribeLiveChat(
+  onMessages: (messages: LiveChatMessage[]) => void,
+  onError?: (err: Error) => void
+): () => void {
+  const q = query(collection(db, 'live_chat_messages'), where('isPublic', '==', true));
+  return onSnapshot(
+    q,
+    (snap) => {
+      const mapped: LiveChatMessage[] = snap.docs
+        .map((d) => {
+          const data = d.data();
+          return {
+            messageId: String(data.messageId ?? d.id),
+            uid: String(data.uid ?? ''),
+            displayName: String(data.displayName ?? 'Member'),
+            username: sanitizeUsername(String(data.username ?? 'member')),
+            avatarId: String(data.avatarId ?? 'crest'),
+            photoDataUrl: String(data.photoDataUrl ?? ''),
+            houseId: VALID_HOUSES.has(data.houseId as HouseId)
+              ? (data.houseId as HouseId)
+              : ('unpledged' as const),
+            role:
+              data.role === 'superadmin' || data.role === 'warden'
+                ? (data.role as UserRole)
+                : 'member',
+            text: String(data.text ?? ''),
+            replyToId: typeof data.replyToId === 'string' ? data.replyToId : undefined,
+            replyToName: typeof data.replyToName === 'string' ? data.replyToName : undefined,
+            replyToSnippet:
+              typeof data.replyToSnippet === 'string' ? data.replyToSnippet : undefined,
+            likedByUids: Array.isArray(data.likedByUids)
+              ? (data.likedByUids as string[])
+              : [],
+            sentAtIso: String(data.sentAtIso ?? ''),
+            isPublic: true,
+          };
+        })
+        .sort((a, b) => a.sentAtIso.localeCompare(b.sentAtIso))
+        .slice(-80);
+      onMessages(mapped);
+    },
+    (error) => {
+      try {
+        handleFirestoreError(error, OperationType.LIST, 'live_chat_messages');
+      } catch (wrapped) {
+        if (onError && wrapped instanceof Error) {
+          onError(wrapped);
+        }
+      }
+    }
+  );
+}
+
+export async function sendLiveChatMessage(
+  user: UserProfile,
+  rawText: string,
+  replyTo?: {
+    messageId: string;
+    displayName: string;
+    snippet: string;
+  }
+): Promise<void> {
+  const text = clampString(rawText, 400);
+  if (!text) {
+    throw new Error('Enter a message before sending.');
+  }
+
+  const nonce = Math.random().toString(36).slice(2, 7);
+  const messageId = `msg-${Date.now().toString(36)}-${nonce}`.slice(0, 64);
+  const msgRef = doc(db, 'live_chat_messages', messageId);
+
+  const payload: Record<string, unknown> = {
+    messageId,
+    uid: user.uid,
+    displayName: clampString(user.displayName, 32, 'Member'),
+    username: sanitizeUsername(user.username),
+    avatarId: sanitizeAvatar(user.avatarId),
+    photoDataUrl: user.photoDataUrl.slice(0, 300000),
+    houseId: user.houseId && VALID_HOUSES.has(user.houseId) ? user.houseId : 'unpledged',
+    role: user.role,
+    text,
+    likedByUids: [],
+    sentAtIso: new Date().toISOString().slice(0, 40),
+    isPublic: true,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
+
+  if (replyTo && /^[a-zA-Z0-9_\-]{1,64}$/.test(replyTo.messageId)) {
+    const cleanReplyName = clampString(replyTo.displayName, 32, 'Member');
+    const cleanSnippet = clampString(replyTo.snippet, 120);
+    if (cleanReplyName && cleanSnippet) {
+      payload.replyToId = replyTo.messageId;
+      payload.replyToName = cleanReplyName;
+      payload.replyToSnippet = cleanSnippet;
+    }
+  }
+
+  try {
+    await setDoc(msgRef, payload);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, msgRef.path);
+  }
+}
+
+export async function toggleLiveChatLike(messageId: string, uid: string): Promise<void> {
+  const msgRef = doc(db, 'live_chat_messages', messageId);
+  try {
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(msgRef);
+      if (!snap.exists()) return;
+      const existingLikes: string[] = Array.isArray(snap.data().likedByUids)
+        ? (snap.data().likedByUids as string[])
+        : [];
+      const alreadyLiked = existingLikes.includes(uid);
+      const nextLikes = alreadyLiked
+        ? existingLikes.filter((id) => id !== uid)
+        : existingLikes.length < 500
+          ? [...existingLikes, uid]
+          : existingLikes;
+
+      tx.update(msgRef, {
+        likedByUids: nextLikes,
+        updatedAt: serverTimestamp(),
+      });
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, msgRef.path);
+  }
+}
+
+export async function deleteLiveChatMessage(messageId: string): Promise<void> {
+  const msgRef = doc(db, 'live_chat_messages', messageId);
+  try {
+    await deleteDoc(msgRef);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, msgRef.path);
+  }
+}
+

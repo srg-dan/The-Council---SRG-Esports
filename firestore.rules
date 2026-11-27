@@ -328,6 +328,38 @@ service cloud.firestore {
         && data.grantedAt is timestamp;
     }
 
+    function isValidLiveChatMessage(data) {
+      return data.keys().hasAll([
+          'messageId', 'uid', 'displayName', 'username', 'avatarId',
+          'photoDataUrl', 'houseId', 'role', 'text', 'likedByUids',
+          'sentAtIso', 'isPublic', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'messageId', 'uid', 'displayName', 'username', 'avatarId',
+          'photoDataUrl', 'houseId', 'role', 'text', 'replyToId',
+          'replyToName', 'replyToSnippet', 'likedByUids', 'sentAtIso',
+          'isPublic', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.messageId) && data.messageId.size() >= 4 && data.messageId.size() <= 64
+        && isValidId(data.uid)
+        && data.displayName is string && data.displayName.size() >= 2 && data.displayName.size() <= 32
+        && data.username is string && data.username.size() >= 1 && data.username.size() <= 40
+        && data.avatarId in ['crest', 'knight', 'visor', 'tome', 'lyre', 'coin']
+        && data.photoDataUrl is string && data.photoDataUrl.size() <= 300000
+        && data.houseId in ['unpledged', 'circuit', 'sigil', 'stride', 'reel', 'echo']
+        && data.role in ['member', 'warden', 'superadmin']
+        && data.text is string && data.text.size() >= 1 && data.text.size() <= 400
+        && (!('replyToId' in data) || (isValidId(data.replyToId) && data.replyToId.size() <= 64))
+        && (!('replyToName' in data) || (data.replyToName is string && data.replyToName.size() >= 1 && data.replyToName.size() <= 32))
+        && (!('replyToSnippet' in data) || (data.replyToSnippet is string && data.replyToSnippet.size() >= 1 && data.replyToSnippet.size() <= 120))
+        && data.likedByUids is list && data.likedByUids.size() <= 500
+        && (data.likedByUids.size() == 0 || (data.likedByUids[0] is string && data.likedByUids[0].size() <= 128))
+        && data.sentAtIso is string && data.sentAtIso.size() >= 10 && data.sentAtIso.size() <= 40
+        && data.isPublic is bool && data.isPublic == true
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
     // =========================================================================
     // CONNECTION PROBE PATH
     // =========================================================================
@@ -518,8 +550,8 @@ service cloud.firestore {
     // LEADERBOARD COLLECTION (REGISTERED MEMBERS ONLY, NO PII)
     // =========================================================================
     match /leaderboard/{userId} {
-      allow get: if isSignedIn() && isValidId(userId) && (existing().isPublic == true || isOwner(userId) || isAdmin());
-      allow list: if isSignedIn() && existing().isPublic == true;
+      allow get: if isValidId(userId) && (existing().isPublic == true || isOwner(userId) || isAdmin());
+      allow list: if existing().isPublic == true;
 
       allow create: if isVerified()
         && isValidId(userId)
@@ -562,8 +594,8 @@ service cloud.firestore {
     // HOUSES COLLECTION (FIVE HOUSES OF AETHERMERE)
     // =========================================================================
     match /houses/{houseId} {
-      allow get: if isSignedIn() && isValidId(houseId) && existing().isPublic == true;
-      allow list: if isSignedIn() && existing().isPublic == true;
+      allow get: if isValidId(houseId) && existing().isPublic == true;
+      allow list: if existing().isPublic == true;
 
       allow create: if isVerified()
         && isValidId(houseId)
@@ -642,8 +674,8 @@ service cloud.firestore {
     // EVENTS COLLECTION (2027 CALENDAR & SUPERADMIN CREATED EVENTS)
     // =========================================================================
     match /events/{eventId} {
-      allow get: if isSignedIn() && isValidId(eventId) && existing().seasonYear >= 2026;
-      allow list: if isSignedIn() && existing().seasonYear >= 2026;
+      allow get: if isValidId(eventId) && existing().seasonYear >= 2026;
+      allow list: if existing().seasonYear >= 2026;
 
       allow create: if isVerified()
         && isValidId(eventId)
@@ -828,6 +860,52 @@ service cloud.firestore {
         );
 
       allow update, delete: if false;
+    }
+
+    // =========================================================================
+    // LIVE CHAT MESSAGES (GUEST READ-ONLY STREAM, VERIFIED MEMBERS CHAT/LIKE)
+    // =========================================================================
+    match /live_chat_messages/{messageId} {
+      allow get: if isValidId(messageId) && existing().isPublic == true;
+      allow list: if existing().isPublic == true;
+
+      allow create: if isVerified()
+        && isValidId(messageId)
+        && isValidLiveChatMessage(incoming())
+        && incoming().messageId == messageId
+        && incoming().uid == request.auth.uid
+        && incoming().likedByUids.size() == 0
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && incoming().role == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+
+      allow update: if isVerified()
+        && isValidId(messageId)
+        && isValidLiveChatMessage(incoming())
+        && incoming().messageId == existing().messageId
+        && incoming().uid == existing().uid
+        && incoming().role == existing().role
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['likedByUids', 'updatedAt'])
+        && (
+          (
+            incoming().likedByUids.size() == existing().likedByUids.size() + 1
+            && incoming().likedByUids.hasAll(existing().likedByUids)
+            && request.auth.uid in incoming().likedByUids
+          )
+          ||
+          (
+            existing().likedByUids.size() == incoming().likedByUids.size() + 1
+            && existing().likedByUids.hasAll(incoming().likedByUids)
+            && !(request.auth.uid in incoming().likedByUids)
+          )
+        );
+
+      allow delete: if isVerified()
+        && isValidId(messageId)
+        && (isOwner(existing().uid) || isAdmin());
     }
   }
 }

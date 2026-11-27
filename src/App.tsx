@@ -12,6 +12,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import {
   CalendarDays,
   Home,
+  LogIn,
   LogOut,
   MailCheck,
   RefreshCw,
@@ -23,9 +24,12 @@ import {
 } from 'lucide-react';
 import { AuthGateModal, type EmailRegistrationPayload } from './components/AuthGateModal.tsx';
 import { EventsView } from './components/EventsView.tsx';
+import { GuestWelcomeModal } from './components/GuestWelcomeModal.tsx';
 import { HomeView, type NavTab } from './components/HomeView.tsx';
 import { HousesView } from './components/HousesView.tsx';
 import { LeaderboardView } from './components/LeaderboardView.tsx';
+import { PrivacyView, TermsView } from './components/LegalPages.tsx';
+import { LiveChatPanel } from './components/LiveChatPanel.tsx';
 import { OathOnboardingWizard } from './components/OathOnboardingWizard.tsx';
 import { OfflineIndicator } from './components/OfflineIndicator.tsx';
 import { ProfileView } from './components/ProfileView.tsx';
@@ -45,6 +49,8 @@ import {
   isUserAdminAccount,
   seedCatalogIfEmpty,
   subscribeCouncilData,
+  subscribeLiveChat,
+  subscribePublicCouncilData,
   updateProfileTransaction,
   updateThemePreference,
   verifyCheckInTransaction,
@@ -56,6 +62,7 @@ import type {
   House,
   HouseId,
   LeaderboardMember,
+  LiveChatMessage,
   PointTransaction,
   ThemePreference,
   UserProfile,
@@ -118,8 +125,17 @@ function formatFirebaseAuthError(err: unknown): string {
   return msg;
 }
 
+function detectLegalRoute(): 'terms' | 'privacy' | null {
+  if (typeof window === 'undefined') return null;
+  const hash = window.location.hash.toLowerCase();
+  const path = window.location.pathname.toLowerCase();
+  if (hash === '#/terms' || hash === '#terms' || path === '/terms') return 'terms';
+  if (hash === '#/privacy' || hash === '#privacy' || path === '/privacy') return 'privacy';
+  return null;
+}
+
 export default function App() {
-  const [activeTab, setActiveTab] = useState<NavTab>('home');
+  const [activeTab, setActiveTab] = useState<NavTab>(() => detectLegalRoute() ?? 'home');
   const [theme, setTheme] = useState<ThemePreference>(readInitialTheme);
   const [authReady, setAuthReady] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -131,8 +147,14 @@ export default function App() {
   const [bookings, setBookings] = useState<EventBooking[]>([]);
   const [transactions, setTransactions] = useState<PointTransaction[]>([]);
   const [leaderboard, setLeaderboard] = useState<LeaderboardMember[]>([]);
+  const [liveChatMessages, setLiveChatMessages] = useState<LiveChatMessage[]>([]);
+
+  const [liveChatDesktopOpen, setLiveChatDesktopOpen] = useState(true);
+  const [liveChatMobileOpen, setLiveChatMobileOpen] = useState(false);
 
   const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [authModalMode, setAuthModalMode] = useState<'signin' | 'register'>('signin');
+  const [guestWelcomeOpen, setGuestWelcomeOpen] = useState(() => detectLegalRoute() === null);
   const [oathWizardOpen, setOathWizardOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<CouncilEvent | null>(null);
   const [verifyingRefresh, setVerifyingRefresh] = useState(false);
@@ -154,6 +176,59 @@ export default function App() {
     setTimeout(() => {
       setToast((curr) => (curr?.id === id ? null : curr));
     }, 3600);
+  }, []);
+
+  const openAuthModal = useCallback((mode: 'signin' | 'register' = 'signin') => {
+    setAuthModalMode(mode);
+    setAuthModalOpen(true);
+  }, []);
+
+  const navigateLegal = useCallback((page: 'terms' | 'privacy') => {
+    setAuthModalOpen(false);
+    setGuestWelcomeOpen(false);
+    setLiveChatMobileOpen(false);
+    setActiveTab(page);
+    if (typeof window !== 'undefined') {
+      window.location.hash = `#/${page}`;
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, []);
+
+  const navigateTab = useCallback((tab: NavTab) => {
+    setActiveTab(tab);
+    if (typeof window !== 'undefined') {
+      if (window.location.hash === '#/terms' || window.location.hash === '#/privacy') {
+        window.history.replaceState(null, '', window.location.pathname === '/terms' || window.location.pathname === '/privacy' ? '/' : window.location.pathname);
+      } else if (window.location.pathname === '/terms' || window.location.pathname === '/privacy') {
+        window.history.replaceState(null, '', '/');
+      }
+    }
+  }, []);
+
+  // Sync URL hash / popstate for linkable Terms & Privacy routes
+  useEffect(() => {
+    const handleRouteSync = () => {
+      const legal = detectLegalRoute();
+      if (legal) {
+        setAuthModalOpen(false);
+        setGuestWelcomeOpen(false);
+        setActiveTab(legal);
+      }
+    };
+    window.addEventListener('hashchange', handleRouteSync);
+    window.addEventListener('popstate', handleRouteSync);
+    return () => {
+      window.removeEventListener('hashchange', handleRouteSync);
+      window.removeEventListener('popstate', handleRouteSync);
+    };
+  }, []);
+
+  // Live chat stream active for both guests (read-only) and registered members
+  useEffect(() => {
+    const unsub = subscribeLiveChat((messages) => {
+      setLiveChatMessages(messages);
+    });
+    return () => unsub();
   }, []);
 
   // Apply Tailwind dark class & meta theme-color
@@ -219,6 +294,8 @@ export default function App() {
       if (!isMounted()) return;
       setIsAdmin(adminFlag);
       setUser(profile);
+      setGuestWelcomeOpen(false);
+      setAuthModalOpen(false);
       if (profile.themePreference) {
         setTheme(profile.themePreference);
       }
@@ -265,7 +342,11 @@ export default function App() {
         setUser(null);
         setBookings([]);
         setTransactions([]);
-        setLeaderboard([]);
+        unsubRef.current = subscribePublicCouncilData({
+          onHouses: (nextHouses) => setHouses(nextHouses),
+          onEvents: (nextEvents) => setEvents(nextEvents),
+          onLeaderboard: (nextLeaderboard) => setLeaderboard(nextLeaderboard),
+        });
         setAuthReady(true);
         return;
       }
@@ -491,43 +572,56 @@ export default function App() {
     label: string;
     mobileLabel: string;
     icon: React.ComponentType<{ className?: string }>;
-  }[] = [
-    isAdmin
-      ? {
-          id: 'superadmin',
-          label: 'Superadmin',
-          mobileLabel: 'Superadmin',
-          icon: ShieldCheck,
-        }
-      : {
-          id: 'home',
-          label: 'Home',
-          mobileLabel: 'Home',
-          icon: Home,
-        },
-    { id: 'houses', label: 'Houses', mobileLabel: 'Houses', icon: Shield },
-    { id: 'events', label: 'Events', mobileLabel: 'Events', icon: CalendarDays },
-    { id: 'leaderboard', label: 'Leaderboard', mobileLabel: 'Ranks', icon: Trophy },
-    { id: 'profile', label: 'Profile', mobileLabel: 'Profile', icon: UserCircle2 },
-  ];
+  }[] = user
+    ? [
+        isAdmin
+          ? {
+              id: 'superadmin',
+              label: 'Superadmin',
+              mobileLabel: 'Superadmin',
+              icon: ShieldCheck,
+            }
+          : {
+              id: 'home',
+              label: 'Home',
+              mobileLabel: 'Home',
+              icon: Home,
+            },
+        { id: 'houses', label: 'Houses', mobileLabel: 'Houses', icon: Shield },
+        { id: 'events', label: 'Events', mobileLabel: 'Events', icon: CalendarDays },
+        { id: 'leaderboard', label: 'Leaderboard', mobileLabel: 'Ranks', icon: Trophy },
+        { id: 'profile', label: 'Profile', mobileLabel: 'Profile', icon: UserCircle2 },
+      ]
+    : [
+        { id: 'home', label: 'Home', mobileLabel: 'Home', icon: Home },
+        { id: 'houses', label: 'Houses', mobileLabel: 'Houses', icon: Shield },
+        { id: 'events', label: 'Events', mobileLabel: 'Events', icon: CalendarDays },
+        { id: 'leaderboard', label: 'Leaderboard', mobileLabel: 'Ranks', icon: Trophy },
+      ];
 
-  const isSplitSignInView = authReady && !needsEmailVerification && !user;
-  const resolvedTab: NavTab = isAdmin && activeTab === 'home' ? 'superadmin' : activeTab;
+  const resolvedTab: NavTab =
+    activeTab === 'terms' || activeTab === 'privacy'
+      ? activeTab
+      : !user
+        ? activeTab === 'profile' || activeTab === 'superadmin'
+          ? 'home'
+          : activeTab
+        : isAdmin && activeTab === 'home'
+          ? 'superadmin'
+          : activeTab;
+
+  const isLegalPage = resolvedTab === 'terms' || resolvedTab === 'privacy';
 
   return (
-    <div
-      className={`min-h-dvh bg-[#F6F6F8] dark:bg-[#121212] text-zinc-900 dark:text-[#F4F3F6] transition-colors ${
-        isSplitSignInView ? 'pb-0' : 'pb-24 md:pb-12'
-      }`}
-    >
+    <div className="min-h-dvh bg-[#F6F6F8] dark:bg-[#121212] text-zinc-900 dark:text-[#F4F3F6] transition-colors pb-24 md:pb-8">
       {/* Desktop Top Header Navigation (hidden on mobile; mobile uses bottom navbar) */}
-      {user && !isSplitSignInView && (
+      {authReady && !needsEmailVerification && (
         <header className="hidden md:block sticky top-0 z-30 border-b border-zinc-200 dark:border-white/10 bg-white/95 dark:bg-[#121212]/95 backdrop-blur-md">
-          <div className="mx-auto max-w-6xl px-6 h-16 flex items-center justify-between gap-6">
+          <div className="mx-auto max-w-7xl px-6 h-16 flex items-center justify-between gap-6">
             {/* Zone 1: Brand Mark */}
             <button
               type="button"
-              onClick={() => setActiveTab(isAdmin ? 'superadmin' : 'home')}
+              onClick={() => navigateTab(isAdmin ? 'superadmin' : 'home')}
               className="flex items-center gap-3 text-left shrink-0 cursor-pointer"
             >
               <img
@@ -537,7 +631,7 @@ export default function App() {
                 className="h-9 w-9 object-contain"
               />
               <div>
-                <p className="font-display text-base font-bold leading-tight text-zinc-900 dark:text-white">
+                <p className="font-display text-base font-bold uppercase leading-tight text-zinc-900 dark:text-white">
                   The Council
                 </p>
                 <p className="text-[11px] leading-tight text-zinc-500 dark:text-zinc-400">
@@ -555,7 +649,7 @@ export default function App() {
                   <button
                     key={item.id}
                     type="button"
-                    onClick={() => setActiveTab(item.id)}
+                    onClick={() => navigateTab(item.id)}
                     className={`inline-flex min-h-[40px] items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-semibold whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
                       active
                         ? 'bg-[#E31E24]/10 text-[#E31E24] dark:bg-[#E31E24]/20 dark:text-[#F7D117]'
@@ -573,183 +667,269 @@ export default function App() {
               })}
             </nav>
 
-            {/* Zone 3: Account & Sign Out */}
-            <div className="flex items-center gap-2.5 shrink-0">
-              <button
-                type="button"
-                onClick={() => setActiveTab('profile')}
-                className="text-right pr-1 cursor-pointer group"
-              >
-                <p className="font-display text-xs font-bold text-zinc-900 dark:text-white group-hover:text-[#E31E24] dark:group-hover:text-[#F7D117] transition-colors">
-                  {user.displayName}
-                </p>
-                <p className="font-mono text-[11px] text-zinc-500 dark:text-zinc-400">
-                  @{user.username}
-                </p>
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleSignOut()}
-                aria-label="Sign out"
-                className="inline-flex min-h-[38px] items-center gap-1.5 rounded-xl border border-zinc-200 dark:border-white/12 px-3 text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:border-[#E31E24] hover:text-[#E31E24] dark:hover:text-[#F7D117] whitespace-nowrap shrink-0 cursor-pointer"
-              >
-                <LogOut className="h-3.5 w-3.5" />
-                <span>Sign Out</span>
-              </button>
-            </div>
+            {/* Zone 3: Account & Sign Out (or Guest Sign Up / Log In) */}
+            {user ? (
+              <div className="flex items-center gap-2.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => navigateTab('profile')}
+                  className="text-right pr-1 cursor-pointer group"
+                >
+                  <p className="font-display text-xs font-bold text-zinc-900 dark:text-white group-hover:text-[#E31E24] dark:group-hover:text-[#F7D117] transition-colors">
+                    {user.displayName}
+                  </p>
+                  <p className="font-mono text-[11px] text-zinc-500 dark:text-zinc-400">
+                    @{user.username}
+                  </p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleSignOut()}
+                  aria-label="Sign out"
+                  className="inline-flex min-h-[38px] items-center gap-1.5 rounded-xl border border-zinc-200 dark:border-white/12 px-3 text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:border-[#E31E24] hover:text-[#E31E24] dark:hover:text-[#F7D117] whitespace-nowrap shrink-0 cursor-pointer"
+                >
+                  <LogOut className="h-3.5 w-3.5" />
+                  <span>Sign Out</span>
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => openAuthModal('signin')}
+                  className="inline-flex min-h-[38px] items-center gap-1.5 rounded-xl border border-zinc-200 dark:border-white/12 px-3.5 text-xs font-semibold text-zinc-700 dark:text-zinc-200 hover:border-[#E31E24] hover:text-[#E31E24] dark:hover:text-[#F7D117] whitespace-nowrap shrink-0 cursor-pointer"
+                >
+                  <span>Log In</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openAuthModal('register')}
+                  className="inline-flex min-h-[38px] items-center gap-1.5 rounded-xl bg-[#E31E24] px-4 text-xs font-semibold text-white hover:bg-[#C8102E] whitespace-nowrap shrink-0 cursor-pointer"
+                >
+                  <span>Sign Up</span>
+                </button>
+              </div>
+            )}
           </div>
         </header>
       )}
 
-      {isSplitSignInView ? (
-        <AuthGateModal
-          isOpen={true}
-          embedded={true}
-          onClose={() => setAuthModalOpen(false)}
-          onGoogleSuccess={handleGoogleSuccess}
-          onEmailSignIn={handleEmailSignIn}
-          onEmailRegister={handleEmailRegister}
-        />
-      ) : (
-        <main className="mx-auto max-w-6xl px-4 sm:px-6 pt-5 md:pt-7">
-          {!authReady ? (
-            <div className="min-h-[75dvh] flex flex-col items-center justify-center gap-3">
-              <img
-                src={SRG_LOGO_URL}
-                alt="SRG Esports"
-                referrerPolicy="no-referrer"
-                className="h-14 w-14 object-contain animate-pulse"
-              />
-              <p className="font-display text-sm text-zinc-500 dark:text-zinc-400">
-                Synchronizing The Council Ledger...
-              </p>
-            </div>
-          ) : needsEmailVerification ? (
-            <div className="min-h-[75dvh] flex items-center justify-center">
-              <div className="w-full max-w-md rounded-3xl border border-[#D4AF37]/35 bg-white dark:bg-[#18181E] p-6 sm:p-8 text-center space-y-4 shadow-xl">
-                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#E31E24]/15 text-[#E31E24] dark:text-[#F7D117]">
-                  <MailCheck className="h-7 w-7" />
-                </div>
-                <h1 className="font-display text-2xl font-bold text-zinc-900 dark:text-white">
-                  Verify Your Email Address
-                </h1>
-                <p className="text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed">
-                  We sent a verification link to{' '}
-                  <strong className="text-zinc-900 dark:text-white">
-                    {auth.currentUser?.email}
-                  </strong>
-                  . Open the link in your inbox, then tap refresh below to enter The Council.
+      {/* Workspace Shell: Left-Side Livechat + Main Content */}
+      <div className="flex items-start">
+        {authReady && !needsEmailVerification && !isLegalPage && (
+          <LiveChatPanel
+            user={user}
+            messages={liveChatMessages}
+            desktopOpen={liveChatDesktopOpen}
+            mobileOpen={liveChatMobileOpen}
+            onToggleDesktop={setLiveChatDesktopOpen}
+            onToggleMobile={setLiveChatMobileOpen}
+            onOpenAuth={(mode) => {
+              setLiveChatMobileOpen(false);
+              openAuthModal(mode);
+            }}
+            onNotify={showToast}
+          />
+        )}
+
+        <div className="min-w-0 flex-1">
+          <main className="mx-auto max-w-6xl px-4 sm:px-6 pt-5 md:pt-7">
+            {!authReady ? (
+              <div className="min-h-[75dvh] flex flex-col items-center justify-center gap-3">
+                <img
+                  src={SRG_LOGO_URL}
+                  alt="SRG Esports"
+                  referrerPolicy="no-referrer"
+                  className="h-14 w-14 object-contain animate-pulse"
+                />
+                <p className="font-display text-sm text-zinc-500 dark:text-zinc-400">
+                  Synchronizing The Council Ledger...
                 </p>
-                <div className="pt-2 space-y-2.5">
-                  <button
-                    type="button"
-                    disabled={verifyingRefresh}
-                    onClick={() => void handleRefreshVerification()}
-                    className="w-full min-h-[46px] inline-flex items-center justify-center gap-2 rounded-xl bg-[#E31E24] text-sm font-semibold text-white hover:bg-[#C8102E] cursor-pointer"
-                  >
-                    <RefreshCw className={`h-4 w-4 ${verifyingRefresh ? 'animate-spin' : ''}`} />
-                    <span>{verifyingRefresh ? 'Checking...' : "I've Verified — Continue"}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleResendVerification()}
-                    className="w-full min-h-[44px] rounded-xl border border-zinc-300 dark:border-white/12 text-xs font-semibold text-zinc-700 dark:text-zinc-200 cursor-pointer"
-                  >
-                    Resend Verification Email
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleSignOut()}
-                    className="w-full min-h-[40px] text-xs text-zinc-500 hover:text-zinc-900 dark:hover:text-white cursor-pointer"
-                  >
-                    Sign Out & Use Another Account
-                  </button>
+              </div>
+            ) : needsEmailVerification ? (
+              <div className="min-h-[75dvh] flex items-center justify-center">
+                <div className="w-full max-w-md rounded-3xl border border-[#D4AF37]/35 bg-white dark:bg-[#18181E] p-6 sm:p-8 text-center space-y-4 shadow-xl">
+                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#E31E24]/15 text-[#E31E24] dark:text-[#F7D117]">
+                    <MailCheck className="h-7 w-7" />
+                  </div>
+                  <h1 className="font-display text-2xl font-bold text-zinc-900 dark:text-white">
+                    Verify Your Email Address
+                  </h1>
+                  <p className="text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed">
+                    We sent a verification link to{' '}
+                    <strong className="text-zinc-900 dark:text-white">
+                      {auth.currentUser?.email}
+                    </strong>
+                    . Open the link in your inbox, then tap refresh below to enter The Council.
+                  </p>
+                  <div className="pt-2 space-y-2.5">
+                    <button
+                      type="button"
+                      disabled={verifyingRefresh}
+                      onClick={() => void handleRefreshVerification()}
+                      className="w-full min-h-[46px] inline-flex items-center justify-center gap-2 rounded-xl bg-[#E31E24] text-sm font-semibold text-white hover:bg-[#C8102E] cursor-pointer"
+                    >
+                      <RefreshCw className={`h-4 w-4 ${verifyingRefresh ? 'animate-spin' : ''}`} />
+                      <span>{verifyingRefresh ? 'Checking...' : "I've Verified — Continue"}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleResendVerification()}
+                      className="w-full min-h-[44px] rounded-xl border border-zinc-300 dark:border-white/12 text-xs font-semibold text-zinc-700 dark:text-zinc-200 cursor-pointer"
+                    >
+                      Resend Verification Email
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleSignOut()}
+                      className="w-full min-h-[40px] text-xs text-zinc-500 hover:text-zinc-900 dark:hover:text-white cursor-pointer"
+                    >
+                      Sign Out & Use Another Account
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          ) : user ? (
-            <>
-              {resolvedTab === 'home' && !isAdmin && (
-                <HomeView
-                  user={user}
-                  houses={houses}
-                  events={events}
-                  bookings={bookings}
-                  transactions={transactions}
-                  onNavigate={setActiveTab}
-                  onOpenAuth={() => setAuthModalOpen(true)}
-                  onOpenOath={() => setOathWizardOpen(true)}
-                  onSelectEvent={(evt) => {
-                    setSelectedEvent(evt);
-                    setActiveTab('events');
+            ) : (
+              <>
+                {resolvedTab === 'home' && !isAdmin && (
+                  <HomeView
+                    user={user}
+                    houses={houses}
+                    events={events}
+                    bookings={bookings}
+                    transactions={transactions}
+                    onNavigate={navigateTab}
+                    onOpenAuth={() => openAuthModal('signin')}
+                    onOpenOath={() => {
+                      if (!user) {
+                        openAuthModal('register');
+                        return;
+                      }
+                      setOathWizardOpen(true);
+                    }}
+                    onSelectEvent={(evt) => {
+                      setSelectedEvent(evt);
+                      navigateTab('events');
+                    }}
+                  />
+                )}
+
+                {resolvedTab === 'houses' && (
+                  <HousesView
+                    houses={houses}
+                    events={events}
+                    user={user}
+                    onSelectEvent={(evt) => {
+                      setSelectedEvent(evt);
+                      navigateTab('events');
+                    }}
+                    onPledgeHouse={() => {
+                      if (!user) {
+                        openAuthModal('register');
+                        return;
+                      }
+                      setOathWizardOpen(true);
+                    }}
+                  />
+                )}
+
+                {resolvedTab === 'events' && (
+                  <EventsView
+                    events={events}
+                    bookings={bookings}
+                    user={user}
+                    isAdmin={isAdmin}
+                    selectedEvent={selectedEvent}
+                    onSelectEvent={setSelectedEvent}
+                    onBookEvent={handleBookEvent}
+                    onClaimEventQr={handleClaimEventQr}
+                    onVerifyCheckIn={handleVerifyCheckIn}
+                    onGrantWarden={handleGrantWarden}
+                    onOpenAuth={() => openAuthModal('signin')}
+                  />
+                )}
+
+                {resolvedTab === 'leaderboard' && (
+                  <LeaderboardView
+                    houses={houses}
+                    leaderboard={leaderboard}
+                    user={user}
+                  />
+                )}
+
+                {resolvedTab === 'profile' && user && (
+                  <ProfileView
+                    user={user}
+                    theme={theme}
+                    isAdmin={isAdmin}
+                    onToggleTheme={handleToggleTheme}
+                    onSaveProfile={handleSaveProfile}
+                    onOpenAdmin={() => navigateTab('superadmin')}
+                    onSignOut={handleSignOut}
+                  />
+                )}
+
+                {resolvedTab === 'superadmin' && user && isAdmin && (
+                  <SuperadminView
+                    currentUser={user}
+                    houses={houses}
+                    events={events}
+                    onNotify={showToast}
+                  />
+                )}
+
+                {resolvedTab === 'terms' && (
+                  <TermsView
+                    onBack={() => navigateTab(isAdmin ? 'superadmin' : 'home')}
+                    onNavigateLegal={navigateLegal}
+                    onOpenAuth={!user ? () => openAuthModal('register') : undefined}
+                  />
+                )}
+
+                {resolvedTab === 'privacy' && (
+                  <PrivacyView
+                    onBack={() => navigateTab(isAdmin ? 'superadmin' : 'home')}
+                    onNavigateLegal={navigateLegal}
+                    onOpenAuth={!user ? () => openAuthModal('register') : undefined}
+                  />
+                )}
+              </>
+            )}
+          </main>
+
+          {/* Compact App Footer with Linkable Terms & Privacy */}
+          {authReady && !needsEmailVerification && (
+            <footer className="mx-auto max-w-6xl px-4 sm:px-6 mt-12 pt-6 pb-4 border-t border-zinc-200 dark:border-white/10 flex flex-wrap items-center justify-between gap-3 text-xs text-zinc-500 dark:text-zinc-400">
+              <span>Selangor Red Giants Esports · The Council</span>
+              <div className="flex items-center gap-4">
+                <a
+                  href="#/terms"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    navigateLegal('terms');
                   }}
-                />
-              )}
-
-              {resolvedTab === 'houses' && (
-                <HousesView
-                  houses={houses}
-                  events={events}
-                  user={user}
-                  onSelectEvent={(evt) => {
-                    setSelectedEvent(evt);
-                    setActiveTab('events');
+                  className="hover:text-[#E31E24] dark:hover:text-[#F7D117] underline underline-offset-4"
+                >
+                  Terms
+                </a>
+                <a
+                  href="#/privacy"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    navigateLegal('privacy');
                   }}
-                  onPledgeHouse={() => setOathWizardOpen(true)}
-                />
-              )}
-
-              {resolvedTab === 'events' && (
-                <EventsView
-                  events={events}
-                  bookings={bookings}
-                  user={user}
-                  isAdmin={isAdmin}
-                  selectedEvent={selectedEvent}
-                  onSelectEvent={setSelectedEvent}
-                  onBookEvent={handleBookEvent}
-                  onClaimEventQr={handleClaimEventQr}
-                  onVerifyCheckIn={handleVerifyCheckIn}
-                  onGrantWarden={handleGrantWarden}
-                  onOpenAuth={() => setAuthModalOpen(true)}
-                />
-              )}
-
-              {resolvedTab === 'leaderboard' && (
-                <LeaderboardView
-                  houses={houses}
-                  leaderboard={leaderboard}
-                  user={user}
-                />
-              )}
-
-              {resolvedTab === 'profile' && (
-                <ProfileView
-                  user={user}
-                  theme={theme}
-                  isAdmin={isAdmin}
-                  onToggleTheme={handleToggleTheme}
-                  onSaveProfile={handleSaveProfile}
-                  onOpenAdmin={() => setActiveTab('superadmin')}
-                  onSignOut={handleSignOut}
-                />
-              )}
-
-              {resolvedTab === 'superadmin' && isAdmin && (
-                <SuperadminView
-                  currentUser={user}
-                  houses={houses}
-                  events={events}
-                  onNotify={showToast}
-                />
-              )}
-            </>
-          ) : null}
-        </main>
-      )}
+                  className="hover:text-[#E31E24] dark:hover:text-[#F7D117] underline underline-offset-4"
+                >
+                  Privacy
+                </a>
+              </div>
+            </footer>
+          )}
+        </div>
+      </div>
 
       {/* Mobile-Only Bottom App-Style Navigation Bar */}
-      {user && (
+      {authReady && !needsEmailVerification && (
         <nav
           aria-label="Mobile Primary Navigation"
           className="md:hidden fixed bottom-0 left-0 right-0 z-40 h-16 border-t border-zinc-200 dark:border-white/10 bg-white/95 dark:bg-[#121212]/95 backdrop-blur-md pb-[env(safe-area-inset-bottom)]"
@@ -762,7 +942,7 @@ export default function App() {
                 <button
                   key={item.id}
                   type="button"
-                  onClick={() => setActiveTab(item.id)}
+                  onClick={() => navigateTab(item.id)}
                   className={`flex min-h-[44px] flex-col items-center justify-center gap-0.5 transition-colors cursor-pointer ${
                     active
                       ? 'text-[#E31E24] dark:text-[#F7D117]'
@@ -780,6 +960,19 @@ export default function App() {
                 </button>
               );
             })}
+
+            {!user && (
+              <button
+                type="button"
+                onClick={() => openAuthModal('signin')}
+                className="flex min-h-[44px] flex-col items-center justify-center gap-0.5 text-[#E31E24] dark:text-[#F7D117] transition-colors cursor-pointer"
+              >
+                <LogIn className="h-5 w-5" />
+                <span className="text-[10px] font-semibold tracking-tight truncate max-w-full px-0.5">
+                  Sign In
+                </span>
+              </button>
+            )}
           </div>
         </nav>
       )}
@@ -814,16 +1007,31 @@ export default function App() {
 
       <OfflineIndicator />
 
+      <GuestWelcomeModal
+        isOpen={authReady && !needsEmailVerification && !user && guestWelcomeOpen && !isLegalPage}
+        onClose={() => setGuestWelcomeOpen(false)}
+        onSignUp={() => {
+          setGuestWelcomeOpen(false);
+          openAuthModal('register');
+        }}
+        onLogin={() => {
+          setGuestWelcomeOpen(false);
+          openAuthModal('signin');
+        }}
+      />
+
       <AuthGateModal
         isOpen={authModalOpen}
+        initialMode={authModalMode}
         onClose={() => setAuthModalOpen(false)}
+        onNavigateLegal={navigateLegal}
         onGoogleSuccess={handleGoogleSuccess}
         onEmailSignIn={handleEmailSignIn}
         onEmailRegister={handleEmailRegister}
       />
 
       <OathOnboardingWizard
-        isOpen={oathWizardOpen && !isAdmin}
+        isOpen={oathWizardOpen && Boolean(user) && !isAdmin}
         user={user}
         onClose={() => setOathWizardOpen(false)}
         onComplete={handleCompleteOath}

@@ -26,7 +26,9 @@ export type NavTab =
   | 'events'
   | 'leaderboard'
   | 'profile'
-  | 'superadmin';
+  | 'superadmin'
+  | 'terms'
+  | 'privacy';
 
 interface HomeViewProps {
   user: UserProfile | null;

@@ -263,7 +263,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
       {/* Header Row */}
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
-          <h1 className="font-display text-2xl sm:text-3xl font-bold text-zinc-900 dark:text-white">
+          <h1 className="font-display text-2xl sm:text-3xl font-bold text-[#E31E24]">
             {isSuperadmin ? 'Superadmin Profile' : 'Member Profile'}
           </h1>
           <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
@@ -329,7 +329,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             <section className="rounded-3xl border border-[#D4AF37]/40 bg-white dark:bg-gradient-to-br dark:from-[#211518] dark:via-[#18181E] dark:to-[#121212] p-5 sm:p-6 shadow-sm dark:shadow-none">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="font-display text-xs font-semibold text-[#E31E24] dark:text-[#F7D117]">
+                  <p className="font-display h-[16px] text-[20px] font-semibold text-[#E31E24]">
                     Official Member QR Pass
                   </p>
                   <h2 className="font-display text-xl font-bold text-zinc-900 dark:text-white mt-0.5">
@@ -404,7 +404,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                   </div>
                   <div className="h-2.5 w-full overflow-hidden rounded-full bg-zinc-200 dark:bg-[#121212]">
                     <div
-                      className="h-full rounded-full bg-gradient-to-r from-[#E31E24] via-[#F7D117] to-[#D4AF37]"
+                      className="h-full rounded-full bg-[#E31E24]"
                       style={{ width: `${progressPercent}%` }}
                     />
                   </div>

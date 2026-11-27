@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { signInWithPopup, signInWithRedirect } from 'firebase/auth';
 import {
   ArrowRight,
@@ -26,7 +26,9 @@ export interface EmailRegistrationPayload {
 interface AuthGateModalProps {
   isOpen: boolean;
   embedded?: boolean;
+  initialMode?: 'signin' | 'register';
   onClose: () => void;
+  onNavigateLegal: (page: 'terms' | 'privacy') => void;
   onGoogleSuccess?: (displayName: string | null) => void;
   onEmailSignIn: (email: string, password: string) => Promise<void>;
   onEmailRegister: (payload: EmailRegistrationPayload) => Promise<void>;
@@ -56,12 +58,14 @@ const GoogleMulticolorIcon: React.FC = () => (
 export const AuthGateModal: React.FC<AuthGateModalProps> = ({
   isOpen,
   embedded = false,
+  initialMode = 'signin',
   onClose,
+  onNavigateLegal,
   onGoogleSuccess,
   onEmailSignIn,
   onEmailRegister,
 }) => {
-  const [mode, setMode] = useState<'signin' | 'register'>('signin');
+  const [mode, setMode] = useState<'signin' | 'register'>(initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -69,10 +73,19 @@ export const AuthGateModal: React.FC<AuthGateModalProps> = ({
   const [username, setUsername] = useState('');
   const [dialCode, setDialCode] = useState('+60');
   const [nationalNumber, setNationalNumber] = useState('');
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      setMode(initialMode);
+      setError(null);
+      setNotice(null);
+    }
+  }, [isOpen, initialMode]);
 
   if (!isOpen && !embedded) return null;
 
@@ -85,6 +98,11 @@ export const AuthGateModal: React.FC<AuthGateModalProps> = ({
   };
 
   const handleGoogleSignIn = () => {
+    if (!agreedToTerms) {
+      setError('Please tick the checkbox to agree to the Terms and Privacy before continuing.');
+      return;
+    }
+
     setError(null);
     setNotice(null);
     setSubmitting(true);
@@ -126,6 +144,11 @@ export const AuthGateModal: React.FC<AuthGateModalProps> = ({
 
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!agreedToTerms) {
+      setError('Please tick the checkbox to agree to the Terms and Privacy before continuing.');
+      return;
+    }
+
     setError(null);
     setNotice(null);
     setSubmitting(true);
@@ -168,14 +191,8 @@ export const AuthGateModal: React.FC<AuthGateModalProps> = ({
     }
   };
 
-  const cardContent = (
-    <div
-      className={`w-full max-w-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#18181E] p-6 sm:p-7 shadow-2xl ${
-        embedded
-          ? 'rounded-3xl'
-          : 'rounded-t-3xl sm:rounded-3xl max-h-[92dvh] overflow-y-auto'
-      }`}
-    >
+  const formInnerContent = (
+    <>
       {!embedded && (
         <div className="mx-auto mb-4 h-1.5 w-10 rounded-full bg-zinc-300 dark:bg-white/15 sm:hidden" />
       )}
@@ -344,12 +361,58 @@ export const AuthGateModal: React.FC<AuthGateModalProps> = ({
           </div>
         </div>
 
+        {/* Terms & Privacy Tickbox */}
+        <label className="flex items-start gap-2.5 text-xs text-zinc-600 dark:text-zinc-300 cursor-pointer select-none pt-0.5">
+          <input
+            type="checkbox"
+            checked={agreedToTerms}
+            onChange={(e) => {
+              setAgreedToTerms(e.target.checked);
+              if (e.target.checked && error?.includes('Terms and Privacy')) {
+                setError(null);
+              }
+            }}
+            className="mt-0.5 h-4 w-4 shrink-0 rounded border-zinc-300 dark:border-white/20 accent-[#E31E24] cursor-pointer"
+          />
+          <span className="leading-relaxed">
+            By signing up you agree to the{' '}
+            <a
+              href="#/terms"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onNavigateLegal('terms');
+              }}
+              className="font-semibold text-[#E31E24] dark:text-[#F7D117] underline underline-offset-2 hover:opacity-80"
+            >
+              Terms
+            </a>{' '}
+            and{' '}
+            <a
+              href="#/privacy"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onNavigateLegal('privacy');
+              }}
+              className="font-semibold text-[#E31E24] dark:text-[#F7D117] underline underline-offset-2 hover:opacity-80"
+            >
+              Privacy
+            </a>
+            .
+          </span>
+        </label>
+
         <button
           type="submit"
           disabled={submitting}
           className="w-full min-h-[46px] rounded-xl bg-[#E31E24] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#C8102E] disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
         >
-          {mode === 'register' ? <UserPlus className="h-4 w-4" /> : <ArrowRight className="h-4 w-4" />}
+          {mode === 'register' ? (
+            <UserPlus className="h-4 w-4" />
+          ) : (
+            <ArrowRight className="h-4 w-4" />
+          )}
           <span>
             {submitting
               ? 'Authenticating...'
@@ -382,7 +445,7 @@ export const AuthGateModal: React.FC<AuthGateModalProps> = ({
           Only verified Firebase accounts appear on Council standings and QR passes. Phone numbers are verified once per account to prevent duplicates.
         </p>
       </div>
-    </div>
+    </>
   );
 
   if (embedded) {
@@ -416,7 +479,9 @@ export const AuthGateModal: React.FC<AuthGateModalProps> = ({
 
         {/* Right Half Sign In / Register Panel */}
         <div className="flex items-center justify-center px-4 py-8 sm:px-8 lg:px-12">
-          {cardContent}
+          <div className="w-full max-w-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#18181E] p-6 sm:p-7 shadow-2xl rounded-3xl">
+            {formInnerContent}
+          </div>
         </div>
       </div>
     );
@@ -429,7 +494,38 @@ export const AuthGateModal: React.FC<AuthGateModalProps> = ({
       aria-modal="true"
       aria-labelledby="auth-modal-title"
     >
-      {cardContent}
+      <div className="w-full max-w-md lg:max-w-4xl rounded-t-3xl sm:rounded-3xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#18181E] overflow-hidden shadow-2xl grid grid-cols-1 lg:grid-cols-2 max-h-[94dvh]">
+        {/* Left Half Visual on Desktop */}
+        <div className="hidden lg:block relative min-h-[540px] overflow-hidden bg-[#121212]">
+          <img
+            src={SIGN_IN_HALF_URL}
+            alt="Selangor Red Giants Esports — The Council"
+            className="h-full w-full object-cover object-center"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-black/20" />
+          <div className="absolute bottom-7 left-7 right-7 flex items-center gap-3.5">
+            <img
+              src={SRG_LOGO_URL}
+              alt="SRG Crest"
+              referrerPolicy="no-referrer"
+              className="h-11 w-11 object-contain shrink-0"
+            />
+            <div>
+              <p className="font-display text-xs font-semibold text-[#F7D117]">
+                Selangor Red Giants Esports · Official Fan Council
+              </p>
+              <p className="font-display text-xl font-bold text-white">
+                Every voice has a seat.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Right Half Sign In / Register Form */}
+        <div className="overflow-y-auto flex items-center justify-center">
+          <div className="w-full max-w-md p-6 sm:p-7">{formInnerContent}</div>
+        </div>
+      </div>
     </div>
   );
 };
