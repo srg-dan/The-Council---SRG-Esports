@@ -98,8 +98,8 @@ export const AuthGateModal: React.FC<AuthGateModalProps> = ({
   };
 
   const handleGoogleSignIn = () => {
-    if (!agreedToTerms) {
-      setError('Please tick the checkbox to agree to the Terms and Privacy before continuing.');
+    if (mode === 'register' && !agreedToTerms) {
+      setError('Please tick the checkbox to agree to the Terms and Privacy before signing up.');
       return;
     }
 
@@ -144,8 +144,8 @@ export const AuthGateModal: React.FC<AuthGateModalProps> = ({
 
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!agreedToTerms) {
-      setError('Please tick the checkbox to agree to the Terms and Privacy before continuing.');
+    if (mode === 'register' && !agreedToTerms) {
+      setError('Please tick the checkbox to agree to the Terms and Privacy before signing up.');
       return;
     }
 
@@ -361,47 +361,49 @@ export const AuthGateModal: React.FC<AuthGateModalProps> = ({
           </div>
         </div>
 
-        {/* Terms & Privacy Tickbox */}
-        <label className="flex items-start gap-2.5 text-xs text-zinc-600 dark:text-zinc-300 cursor-pointer select-none pt-0.5">
-          <input
-            type="checkbox"
-            checked={agreedToTerms}
-            onChange={(e) => {
-              setAgreedToTerms(e.target.checked);
-              if (e.target.checked && error?.includes('Terms and Privacy')) {
-                setError(null);
-              }
-            }}
-            className="mt-0.5 h-4 w-4 shrink-0 rounded border-zinc-300 dark:border-white/20 accent-[#E31E24] cursor-pointer"
-          />
-          <span className="leading-relaxed">
-            By signing up you agree to the{' '}
-            <a
-              href="#/terms"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                onNavigateLegal('terms');
+        {/* Terms & Privacy Tickbox (Register only) */}
+        {mode === 'register' && (
+          <label className="flex items-start gap-2.5 text-xs text-zinc-600 dark:text-zinc-300 cursor-pointer select-none pt-0.5">
+            <input
+              type="checkbox"
+              checked={agreedToTerms}
+              onChange={(e) => {
+                setAgreedToTerms(e.target.checked);
+                if (e.target.checked && error?.includes('Terms and Privacy')) {
+                  setError(null);
+                }
               }}
-              className="font-semibold text-[#E31E24] dark:text-[#F7D117] underline underline-offset-2 hover:opacity-80"
-            >
-              Terms
-            </a>{' '}
-            and{' '}
-            <a
-              href="#/privacy"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                onNavigateLegal('privacy');
-              }}
-              className="font-semibold text-[#E31E24] dark:text-[#F7D117] underline underline-offset-2 hover:opacity-80"
-            >
-              Privacy
-            </a>
-            .
-          </span>
-        </label>
+              className="mt-0.5 h-4 w-4 shrink-0 rounded border-zinc-300 dark:border-white/20 accent-[#E31E24] cursor-pointer"
+            />
+            <span className="leading-relaxed">
+              By signing up you agree to the{' '}
+              <a
+                href="#/terms"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onNavigateLegal('terms');
+                }}
+                className="font-semibold text-[#E31E24] dark:text-[#F7D117] underline underline-offset-2 hover:opacity-80"
+              >
+                Terms
+              </a>{' '}
+              and{' '}
+              <a
+                href="#/privacy"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onNavigateLegal('privacy');
+                }}
+                className="font-semibold text-[#E31E24] dark:text-[#F7D117] underline underline-offset-2 hover:opacity-80"
+              >
+                Privacy
+              </a>
+              .
+            </span>
+          </label>
+        )}
 
         <button
           type="submit"
