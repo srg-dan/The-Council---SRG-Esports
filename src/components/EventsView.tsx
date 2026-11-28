@@ -28,7 +28,7 @@ import type {
   RankTitle,
   UserProfile,
 } from '../types/council.ts';
-import { HouseCrest, ResilientBannerImage } from './CouncilIcons.tsx';
+import { HouseCrest, ResilientBannerImage, WardenLabel } from './CouncilIcons.tsx';
 
 interface EventsViewProps {
   events: CouncilEvent[];
@@ -509,7 +509,7 @@ export const EventsView: React.FC<EventsViewProps> = ({
                       <HouseCrest houseId={evt.houseId} size="sm" />
                       <div className="min-w-0">
                         <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate">
-                          {house ? house.name : 'All Houses'} · {evt.wardenName}
+                          {house ? house.name : 'All Houses'} · <WardenLabel wardenName={evt.wardenName} />
                         </p>
                         <h2 className="font-display text-base font-bold text-zinc-900 dark:text-white leading-snug">
                           {evt.title}
@@ -775,7 +775,7 @@ export const EventsView: React.FC<EventsViewProps> = ({
             <div className="p-6 pt-4 space-y-4">
               <div>
                 <p className="text-xs font-semibold text-[#E31E24] dark:text-[#F7D117]">
-                  {selectedEvent.month} Activation · Hosted by {selectedEvent.wardenName}
+                  {selectedEvent.month} Activation · Hosted by <WardenLabel wardenName={selectedEvent.wardenName} />
                 </p>
                 <h2 className="font-display text-2xl font-bold text-zinc-900 dark:text-white mt-1">
                   {selectedEvent.title}

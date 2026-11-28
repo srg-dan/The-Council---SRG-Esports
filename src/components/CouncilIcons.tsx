@@ -4,8 +4,6 @@ import {
   Compass,
   Coins,
   Crown,
-  Film,
-  Footprints,
   Gauge,
   Music2,
   Shield,
@@ -15,6 +13,89 @@ import {
 import type { ClassId, HouseId } from '../types/council.ts';
 import { SRG_LOGO_URL } from '../data/media.ts';
 
+const HOUSE_ICON_ASSETS: Record<
+  HouseId,
+  { src: string; alt: string; borderClass: string }
+> = {
+  circuit: {
+    src: '/house_icons/House%20Circuit_Warden%20Kramm.png',
+    alt: 'House Circuit · Warden Kramm',
+    borderClass: 'border-green-500/60 bg-green-950/30',
+  },
+  sigil: {
+    src: '/house_icons/House%20Sigil_Warden%20Yums.png',
+    alt: 'House Sigil · Warden Yums',
+    borderClass: 'border-purple-500/60 bg-purple-950/30',
+  },
+  stride: {
+    src: '/house_icons/House%20Stride_Warden%20Stormie.png',
+    alt: 'House Stride · Warden Stormie',
+    borderClass: 'border-orange-500/60 bg-orange-950/30',
+  },
+  reel: {
+    src: '/house_icons/House%20Reel_Warden%20Innocent.png',
+    alt: 'House Reel · Warden Innocent',
+    borderClass: 'border-yellow-400/70 bg-yellow-950/30',
+  },
+  echo: {
+    src: '/house_icons/House%20Echo_Warden%20Sekys.png',
+    alt: 'House Echo · Warden Sekys',
+    borderClass: 'border-emerald-400/60 bg-emerald-950/30',
+  },
+};
+
+export function getWardenTextClass(wardenName: string, onDark = false): string {
+  const lower = wardenName.toLowerCase();
+  if (lower.includes('kramm')) {
+    return onDark
+      ? 'text-[#22C55E] font-semibold'
+      : 'text-[#00A82D] dark:text-[#22C55E] font-semibold';
+  }
+  if (lower.includes('yums')) {
+    return onDark
+      ? 'text-[#A78BFA] font-semibold'
+      : 'text-[#6D28D9] dark:text-[#A78BFA] font-semibold';
+  }
+  if (lower.includes('stormie')) {
+    return onDark
+      ? 'text-[#FB923C] font-semibold'
+      : 'text-[#EA580C] dark:text-[#F97316] font-semibold';
+  }
+  if (lower.includes('innocent')) {
+    return onDark
+      ? 'text-[#FACC15] font-semibold'
+      : 'text-[#B45309] dark:text-[#FACC15] font-semibold';
+  }
+  if (lower.includes('sekys')) {
+    return onDark
+      ? 'text-[#34D399] font-semibold'
+      : 'text-[#059669] dark:text-[#34D399] font-semibold';
+  }
+  return '';
+}
+
+export const WardenLabel: React.FC<{
+  wardenName: string;
+  prefix?: string;
+  onDark?: boolean;
+}> = ({ wardenName, prefix = '', onDark = false }) => {
+  const colorClass = getWardenTextClass(wardenName, onDark);
+  if (!colorClass) {
+    return (
+      <>
+        {prefix}
+        {wardenName}
+      </>
+    );
+  }
+  return (
+    <span className={colorClass}>
+      {prefix}
+      {wardenName}
+    </span>
+  );
+};
+
 export const HouseCrest: React.FC<{
   houseId: HouseId | 'all' | null | undefined;
   size?: 'sm' | 'md' | 'lg';
@@ -22,56 +103,28 @@ export const HouseCrest: React.FC<{
   const dims = size === 'sm' ? 'h-8 w-8' : size === 'lg' ? 'h-14 w-14' : 'h-10 w-10';
   const iconDims = size === 'sm' ? 'h-4 w-4' : size === 'lg' ? 'h-7 w-7' : 'h-5 w-5';
 
-  switch (houseId) {
-    case 'circuit':
-      return (
-        <div
-          className={`${dims} flex shrink-0 items-center justify-center rounded-xl border border-orange-500/40 bg-orange-500/15 text-orange-600 dark:text-orange-400`}
-        >
-          <Gauge className={iconDims} />
-        </div>
-      );
-    case 'sigil':
-      return (
-        <div
-          className={`${dims} flex shrink-0 items-center justify-center rounded-xl border border-purple-500/40 bg-purple-500/15 text-purple-600 dark:text-purple-300`}
-        >
-          <Shield className={iconDims} />
-        </div>
-      );
-    case 'stride':
-      return (
-        <div
-          className={`${dims} flex shrink-0 items-center justify-center rounded-xl border border-emerald-500/40 bg-emerald-500/15 text-emerald-600 dark:text-emerald-300`}
-        >
-          <Footprints className={iconDims} />
-        </div>
-      );
-    case 'reel':
-      return (
-        <div
-          className={`${dims} flex shrink-0 items-center justify-center rounded-xl border border-amber-500/40 bg-amber-500/15 text-amber-600 dark:text-amber-300`}
-        >
-          <Film className={iconDims} />
-        </div>
-      );
-    case 'echo':
-      return (
-        <div
-          className={`${dims} flex shrink-0 items-center justify-center rounded-xl border border-cyan-500/40 bg-cyan-500/15 text-cyan-600 dark:text-cyan-300`}
-        >
-          <Music2 className={iconDims} />
-        </div>
-      );
-    default:
-      return (
-        <div
-          className={`${dims} flex shrink-0 items-center justify-center rounded-xl border border-[#D4AF37]/40 bg-[#E31E24]/15 text-[#E31E24] dark:text-[#F7D117]`}
-        >
-          <Crown className={iconDims} />
-        </div>
-      );
+  if (houseId && houseId !== 'all' && houseId in HOUSE_ICON_ASSETS) {
+    const asset = HOUSE_ICON_ASSETS[houseId as HouseId];
+    return (
+      <div
+        className={`${dims} shrink-0 overflow-hidden rounded-xl border ${asset.borderClass}`}
+      >
+        <img
+          src={asset.src}
+          alt={asset.alt}
+          className="h-full w-full object-cover object-top"
+        />
+      </div>
+    );
   }
+
+  return (
+    <div
+      className={`${dims} flex shrink-0 items-center justify-center rounded-xl border border-[#D4AF37]/40 bg-[#E31E24]/15 text-[#E31E24] dark:text-[#F7D117]`}
+    >
+      <Crown className={iconDims} />
+    </div>
+  );
 };
 
 export const ClassInsignia: React.FC<{

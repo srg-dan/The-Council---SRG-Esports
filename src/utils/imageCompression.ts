@@ -72,6 +72,119 @@ function canvasToWebpBlob(canvas: HTMLCanvasElement, quality: number): Promise<B
   });
 }
 
+export interface AvatarCropSource {
+  previewUrl: string;
+  image: HTMLImageElement;
+  naturalWidth: number;
+  naturalHeight: number;
+}
+
+export interface SquareCropRect {
+  sx: number;
+  sy: number;
+  sSize: number;
+}
+
+export async function prepareAvatarCropSource(file: File): Promise<AvatarCropSource> {
+  if (!isSupportedImageFile(file)) {
+    throw new Error('Unsupported file type. Please choose a JPG, PNG, WebP, or HEIC image.');
+  }
+
+  if (file.size > MAX_AVATAR_INPUT_BYTES) {
+    throw new Error('File is too large. Please choose an image under 10 MB.');
+  }
+
+  let workingBlob: Blob = file;
+
+  if (isHeicFile(file)) {
+    try {
+      const converted = await heic2any({
+        blob: file,
+        toType: 'image/jpeg',
+        quality: 0.92,
+      });
+      workingBlob = Array.isArray(converted) ? converted[0] : converted;
+    } catch {
+      workingBlob = file;
+    }
+  }
+
+  const previewUrl = URL.createObjectURL(workingBlob);
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error('Unsupported file type or corrupted image.'));
+      el.src = previewUrl;
+    });
+
+    if (!img.width || !img.height) {
+      throw new Error('Selected image has invalid dimensions.');
+    }
+
+    return {
+      previewUrl,
+      image: img,
+      naturalWidth: img.width,
+      naturalHeight: img.height,
+    };
+  } catch (err) {
+    URL.revokeObjectURL(previewUrl);
+    throw err;
+  }
+}
+
+export async function cropAndCompressAvatar(
+  img: HTMLImageElement,
+  crop: SquareCropRect
+): Promise<ProcessedAvatarResult> {
+  const canvas = document.createElement('canvas');
+  canvas.width = TARGET_AVATAR_DIMENSION;
+  canvas.height = TARGET_AVATAR_DIMENSION;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) {
+    throw new Error('Image processing is unavailable in this browser.');
+  }
+
+  const sx = Math.max(0, Math.min(img.width - 1, crop.sx));
+  const sy = Math.max(0, Math.min(img.height - 1, crop.sy));
+  const sSize = Math.max(1, Math.min(img.width - sx, img.height - sy, crop.sSize));
+
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(
+    img,
+    sx,
+    sy,
+    sSize,
+    sSize,
+    0,
+    0,
+    TARGET_AVATAR_DIMENSION,
+    TARGET_AVATAR_DIMENSION
+  );
+
+  // Compress to WebP at ~0.8 quality, stepping down gently if needed to target <= 100 KB
+  let quality = 0.8;
+  let webpBlob = await canvasToWebpBlob(canvas, quality);
+
+  while (webpBlob.size > TARGET_MAX_BYTES && quality > 0.45) {
+    quality = Number((quality - 0.1).toFixed(2));
+    webpBlob = await canvasToWebpBlob(canvas, quality);
+  }
+
+  if (webpBlob.size > MAX_AVATAR_UPLOAD_BYTES) {
+    throw new Error('Processed image is still too large. Please try another photo.');
+  }
+
+  const previewUrl = URL.createObjectURL(webpBlob);
+  return {
+    blob: webpBlob,
+    previewUrl,
+    sizeBytes: webpBlob.size,
+  };
+}
+
 export async function processAvatarImage(file: File): Promise<ProcessedAvatarResult> {
   if (!isSupportedImageFile(file)) {
     throw new Error('Unsupported file type. Please choose a JPG, PNG, WebP, or HEIC image.');
@@ -102,50 +215,9 @@ export async function processAvatarImage(file: File): Promise<ProcessedAvatarRes
     throw new Error('Selected image has invalid dimensions.');
   }
 
-  const canvas = document.createElement('canvas');
-  canvas.width = TARGET_AVATAR_DIMENSION;
-  canvas.height = TARGET_AVATAR_DIMENSION;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) {
-    throw new Error('Image processing is unavailable in this browser.');
-  }
-
-  // Center-crop to a 1:1 square and resize to 512x512
   const squareSide = Math.min(img.width, img.height);
   const sx = Math.max(0, Math.floor((img.width - squareSide) / 2));
   const sy = Math.max(0, Math.floor((img.height - squareSide) / 2));
 
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(
-    img,
-    sx,
-    sy,
-    squareSide,
-    squareSide,
-    0,
-    0,
-    TARGET_AVATAR_DIMENSION,
-    TARGET_AVATAR_DIMENSION
-  );
-
-  // Compress to WebP at ~0.8 quality, stepping down gently if needed to target <= 100 KB
-  let quality = 0.8;
-  let webpBlob = await canvasToWebpBlob(canvas, quality);
-
-  while (webpBlob.size > TARGET_MAX_BYTES && quality > 0.45) {
-    quality = Number((quality - 0.1).toFixed(2));
-    webpBlob = await canvasToWebpBlob(canvas, quality);
-  }
-
-  if (webpBlob.size > MAX_AVATAR_UPLOAD_BYTES) {
-    throw new Error('Processed image is still too large. Please try another photo.');
-  }
-
-  const previewUrl = URL.createObjectURL(webpBlob);
-  return {
-    blob: webpBlob,
-    previewUrl,
-    sizeBytes: webpBlob.size,
-  };
+  return cropAndCompressAvatar(img, { sx, sy, sSize: squareSide });
 }

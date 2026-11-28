@@ -7,7 +7,7 @@ import type {
   LeaderboardMember,
   UserProfile,
 } from '../types/council.ts';
-import { AvatarSigil, HouseCrest } from './CouncilIcons.tsx';
+import { AvatarSigil, HouseCrest, WardenLabel } from './CouncilIcons.tsx';
 
 interface LeaderboardViewProps {
   houses: House[];
@@ -119,7 +119,7 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
                         )}
                       </div>
                       <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                        Warden {house.wardenName} · {house.domain} ·{' '}
+                        <WardenLabel wardenName={house.wardenName} prefix="Warden " /> · {house.domain} ·{' '}
                         <span className="font-mono tabular-nums">
                           {house.memberCount.toLocaleString()}
                         </span>{' '}

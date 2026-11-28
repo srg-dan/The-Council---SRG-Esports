@@ -16,7 +16,7 @@ import type {
   PointTransaction,
   UserProfile,
 } from '../types/council.ts';
-import { HouseCrest, ResilientBannerImage } from './CouncilIcons.tsx';
+import { HouseCrest, ResilientBannerImage, WardenLabel } from './CouncilIcons.tsx';
 import { MemberCard } from './MemberCard.tsx';
 import { PWAInstallButton } from './PWAInstallButton.tsx';
 
@@ -111,7 +111,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               </div>
             </div>
 
-            <h1 className="font-display mt-5 text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-white">
+            <h1 className="font-display mt-5 text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight uppercase text-white">
               Every voice has a seat.
             </h1>
             <p className="mt-3 text-sm sm:text-base text-zinc-200 max-w-xl leading-relaxed">
@@ -276,7 +276,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                             {house.name}
                           </h3>
                           <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                            Warden {house.wardenName} · {house.memberCount} members
+                            <WardenLabel wardenName={house.wardenName} prefix="Warden " /> · {house.memberCount} members
                           </p>
                         </div>
                       </div>
@@ -311,7 +311,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
                 <div className="absolute bottom-3 left-5 right-5 flex items-center justify-between gap-2">
                   <span className="font-display text-xs font-semibold text-[#F7D117]">
-                    {nextEvent.month} · {nextEvent.wardenName}
+                    {nextEvent.month} · <WardenLabel wardenName={nextEvent.wardenName} onDark />
                   </span>
                   <span className="font-mono text-xs text-zinc-100 tabular-nums">
                     +{nextEvent.checkInPoints} pts

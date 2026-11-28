@@ -110,6 +110,16 @@
   h1, h2, h3, h4, .font-display {
     font-family: var(--font-display);
     text-wrap: balance;
+    font-size: calc(1rem + 3px);
+    --text-xs: calc(0.75rem + 3px);
+    --text-sm: calc(0.875rem + 3px);
+    --text-base: calc(1rem + 3px);
+    --text-lg: calc(1.125rem + 3px);
+    --text-xl: calc(1.25rem + 3px);
+    --text-2xl: calc(1.5rem + 3px);
+    --text-3xl: calc(1.875rem + 3px);
+    --text-4xl: calc(2.25rem + 3px);
+    --text-5xl: calc(3rem + 3px);
   }
 
   p {

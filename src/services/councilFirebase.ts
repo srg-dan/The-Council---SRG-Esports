@@ -371,14 +371,26 @@ export async function seedCatalogIfEmpty(isAdminUser: boolean): Promise<void> {
     const housesSnap = await getDocs(
       query(collection(db, 'houses'), where('isPublic', '==', true))
     );
-    const existingIds = new Set(housesSnap.docs.map((d) => d.id));
-    const missingHouses = HOUSES.filter((h) => !existingIds.has(h.houseId));
-    if (missingHouses.length > 0) {
+    const existingById = new Map(housesSnap.docs.map((d) => [d.id, d.data()]));
+    const missingHouses = HOUSES.filter((h) => !existingById.has(h.houseId));
+    const housesToSyncColor = isAdminUser
+      ? HOUSES.filter((h) => {
+          const existing = existingById.get(h.houseId);
+          return Boolean(existing && existing.accentColor !== h.accentColor);
+        })
+      : [];
+    if (missingHouses.length > 0 || housesToSyncColor.length > 0) {
       const batch = writeBatch(db);
       for (const h of missingHouses) {
         batch.set(doc(db, 'houses', h.houseId), {
           ...h,
           isPublic: true,
+          updatedAt: serverTimestamp(),
+        });
+      }
+      for (const h of housesToSyncColor) {
+        batch.update(doc(db, 'houses', h.houseId), {
+          accentColor: h.accentColor,
           updatedAt: serverTimestamp(),
         });
       }
@@ -493,7 +505,11 @@ export function subscribeCouncilData(uid: string, handlers: CouncilSubscriptions
         handlers.onHouses(HOUSES);
         return;
       }
-      const list = snap.docs.map((d) => d.data() as House);
+      const list = snap.docs.map((d) => {
+        const raw = d.data() as House;
+        const canonical = HOUSES.find((h) => h.houseId === raw.houseId);
+        return canonical ? { ...raw, accentColor: canonical.accentColor } : raw;
+      });
       handlers.onHouses(list);
     },
     (error) => handleSubError(error, OperationType.LIST, 'houses')
@@ -591,7 +607,11 @@ export function subscribePublicCouncilData(handlers: {
         handlers.onHouses(HOUSES);
         return;
       }
-      const list = snap.docs.map((d) => d.data() as House);
+      const list = snap.docs.map((d) => {
+        const raw = d.data() as House;
+        const canonical = HOUSES.find((h) => h.houseId === raw.houseId);
+        return canonical ? { ...raw, accentColor: canonical.accentColor } : raw;
+      });
       handlers.onHouses(list);
     },
     () => {
@@ -692,18 +712,32 @@ export async function completeOathTransaction(
 
   try {
     return await runTransaction(db, async (tx) => {
-      const userSnap = await tx.get(userRef);
+      const houseRef = doc(db, 'houses', payload.houseId);
+      const [userSnap, lbSnap, phoneSnap, houseSnap] = await Promise.all([
+        tx.get(userRef),
+        tx.get(leaderboardRef),
+        tx.get(newPhoneRef),
+        tx.get(houseRef),
+      ]);
       if (!userSnap.exists()) {
         throw new Error('Member profile not found.');
       }
       const userData = userSnap.data();
-      const lbSnap = await tx.get(leaderboardRef);
-      const phoneSnap = await tx.get(newPhoneRef);
 
       if (phoneSnap.exists() && phoneSnap.data().uid !== uid) {
         throw new Error('This phone number is already registered to another Council account.');
       }
 
+      const wasUnpledged = userData.houseId === 'unpledged';
+      const memberQrId = String(userData.memberQrId || buildMemberQrId(uid));
+      const qrIndexRef = doc(db, 'member_qr_index', memberQrId);
+      const qrIndexSnap = wasUnpledged ? await tx.get(qrIndexRef) : null;
+
+      if (wasUnpledged && !houseSnap.exists()) {
+        throw new Error('Selected House does not exist yet.');
+      }
+
+      // --- ALL READS COMPLETE ABOVE; ONLY WRITES BELOW ---
       const oldPhone = String(userData.phoneNumber ?? '');
       const oldPhoneKey = phoneToKey(oldPhone);
       if (oldPhoneKey && oldPhoneKey !== newPhoneKey) {
@@ -718,17 +752,8 @@ export async function completeOathTransaction(
         });
       }
 
-      const wasUnpledged = userData.houseId === 'unpledged';
-      const memberQrId = String(userData.memberQrId || buildMemberQrId(uid));
-
       if (wasUnpledged) {
-        const houseRef = doc(db, 'houses', payload.houseId);
-        const houseSnap = await tx.get(houseRef);
-        if (!houseSnap.exists()) {
-          throw new Error('Selected House does not exist yet.');
-        }
-        const houseData = houseSnap.data();
-
+        const houseData = houseSnap.data()!;
         const multiplier = 1;
         const awardedPoints = 100;
         const nextPoints = Number(userData.points ?? 0) + awardedPoints;
@@ -768,9 +793,7 @@ export async function completeOathTransaction(
           updatedAt: serverTimestamp(),
         });
 
-        const qrIndexRef = doc(db, 'member_qr_index', memberQrId);
-        const qrIndexSnap = await tx.get(qrIndexRef);
-        if (qrIndexSnap.exists()) {
+        if (qrIndexSnap?.exists()) {
           tx.update(qrIndexRef, {
             username: cleanUsername,
             displayName: cleanName,
@@ -881,6 +904,11 @@ export async function updateProfileTransaction(
       }
 
       const userData = userSnap.data();
+      const qrId = String(userData.memberQrId || buildMemberQrId(uid));
+      const qrRef = doc(db, 'member_qr_index', qrId);
+      const qrSnap = await tx.get(qrRef);
+
+      // --- ALL READS COMPLETE ABOVE; ONLY WRITES BELOW ---
       const oldPhoneKey = phoneToKey(String(userData.phoneNumber ?? ''));
       if (oldPhoneKey && oldPhoneKey !== newPhoneKey) {
         tx.delete(doc(db, 'phone_registry', oldPhoneKey));
@@ -915,9 +943,6 @@ export async function updateProfileTransaction(
         });
       }
 
-      const qrId = String(userData.memberQrId || buildMemberQrId(uid));
-      const qrRef = doc(db, 'member_qr_index', qrId);
-      const qrSnap = await tx.get(qrRef);
       if (qrSnap.exists()) {
         tx.update(qrRef, {
           username: cleanUsername,
@@ -1387,10 +1412,9 @@ export async function adminUpdateUser(
 
   try {
     await runTransaction(db, async (tx) => {
-      const userSnap = await tx.get(userRef);
+      const [userSnap, lbSnap] = await Promise.all([tx.get(userRef), tx.get(lbRef)]);
       if (!userSnap.exists()) throw new Error('User record not found.');
       const userData = userSnap.data();
-      const lbSnap = await tx.get(lbRef);
 
       const nextName = updates.displayName
         ? clampString(updates.displayName, 32, String(userData.displayName))
@@ -1416,16 +1440,28 @@ export async function adminUpdateUser(
       const actualDelta = nextPoints - oldPoints;
       const nextRank = calculateRank(nextPoints, nextGiantsChosen);
 
-      // Update phone_registry if phone changed
       const oldPhoneKey = phoneToKey(String(userData.phoneNumber ?? ''));
       const newPhoneKey = phoneToKey(nextPhone);
-      if (newPhoneKey && newPhoneKey !== oldPhoneKey) {
-        const phoneSnap = await tx.get(doc(db, 'phone_registry', newPhoneKey));
-        if (phoneSnap.exists() && phoneSnap.data().uid !== targetUid) {
-          throw new Error('Phone number is already assigned to another account.');
-        }
+      const shouldCheckPhone = Boolean(newPhoneKey && newPhoneKey !== oldPhoneKey);
+
+      const houseId = userData.houseId as string;
+      const hasHouse = VALID_HOUSES.has(houseId as HouseId);
+      const shouldUpdateHouse = Boolean(hasHouse && actualDelta !== 0);
+      const houseRef = doc(db, 'houses', houseId || 'circuit');
+
+      const [phoneSnap, houseSnap] = await Promise.all([
+        shouldCheckPhone ? tx.get(doc(db, 'phone_registry', newPhoneKey)) : Promise.resolve(null),
+        shouldUpdateHouse ? tx.get(houseRef) : Promise.resolve(null),
+      ]);
+
+      if (phoneSnap && phoneSnap.exists() && phoneSnap.data().uid !== targetUid) {
+        throw new Error('Phone number is already assigned to another account.');
+      }
+
+      // --- ALL READS COMPLETE ABOVE; ONLY WRITES BELOW ---
+      if (shouldCheckPhone) {
         if (oldPhoneKey) tx.delete(doc(db, 'phone_registry', oldPhoneKey));
-        if (!phoneSnap.exists()) {
+        if (phoneSnap && !phoneSnap.exists()) {
           tx.set(doc(db, 'phone_registry', newPhoneKey), {
             phoneKey: newPhoneKey,
             phoneNumber: nextPhone,
@@ -1435,17 +1471,11 @@ export async function adminUpdateUser(
         }
       }
 
-      const houseId = userData.houseId as string;
-      const hasHouse = VALID_HOUSES.has(houseId as HouseId);
-      if (hasHouse && actualDelta !== 0) {
-        const houseRef = doc(db, 'houses', houseId);
-        const houseSnap = await tx.get(houseRef);
-        if (houseSnap.exists()) {
-          tx.update(houseRef, {
-            totalPoints: Math.max(0, Number(houseSnap.data().totalPoints ?? 0) + actualDelta),
-            updatedAt: serverTimestamp(),
-          });
-        }
+      if (shouldUpdateHouse && houseSnap && houseSnap.exists()) {
+        tx.update(houseRef, {
+          totalPoints: Math.max(0, Number(houseSnap.data().totalPoints ?? 0) + actualDelta),
+          updatedAt: serverTimestamp(),
+        });
       }
 
       tx.update(userRef, {
@@ -1872,6 +1902,12 @@ export async function claimEventQrTransaction(
       const updatedAttended = [...attended, eventId];
       const nowIso = new Date().toISOString().slice(0, 40);
 
+      const hasHouse = VALID_HOUSES.has(userData.houseId as HouseId);
+      const houseId = (hasHouse ? userData.houseId : 'circuit') as HouseId;
+      const houseRef = doc(db, 'houses', houseId);
+      const houseSnap = hasHouse ? await tx.get(houseRef) : null;
+
+      // --- ALL READS COMPLETE ABOVE; ONLY WRITES BELOW ---
       tx.update(userRef, {
         points: nextPoints,
         rank: nextRank,
@@ -1887,31 +1923,25 @@ export async function claimEventQrTransaction(
         });
       }
 
-      const hasHouse = VALID_HOUSES.has(userData.houseId as HouseId);
-      if (hasHouse) {
-        const houseId = userData.houseId as HouseId;
-        const houseRef = doc(db, 'houses', houseId);
-        const houseSnap = await tx.get(houseRef);
-        if (houseSnap.exists()) {
-          tx.update(houseRef, {
-            totalPoints: Number(houseSnap.data().totalPoints ?? 0) + awardedPoints,
-            updatedAt: serverTimestamp(),
-          });
+      if (hasHouse && houseSnap && houseSnap.exists()) {
+        tx.update(houseRef, {
+          totalPoints: Number(houseSnap.data().totalPoints ?? 0) + awardedPoints,
+          updatedAt: serverTimestamp(),
+        });
 
-          const txId = `tx-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
-          tx.set(doc(db, 'point_transactions', txId), {
-            txId,
-            userId: uid,
-            houseId,
-            source: 'event_checkin',
-            description: clampString(`Event QR Scan: ${eventData.title}`, 140),
-            basePoints: awardedPoints,
-            multiplierApplied: 1,
-            finalPoints: awardedPoints,
-            timestamp: nowIso,
-            createdAt: serverTimestamp(),
-          });
-        }
+        const txId = `tx-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+        tx.set(doc(db, 'point_transactions', txId), {
+          txId,
+          userId: uid,
+          houseId,
+          source: 'event_checkin',
+          description: clampString(`Event QR Scan: ${eventData.title}`, 140),
+          basePoints: awardedPoints,
+          multiplierApplied: 1,
+          finalPoints: awardedPoints,
+          timestamp: nowIso,
+          createdAt: serverTimestamp(),
+        });
       }
 
       return {

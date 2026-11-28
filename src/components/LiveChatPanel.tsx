@@ -445,7 +445,7 @@ export const LiveChatPanel: React.FC<LiveChatPanelProps> = ({
                 Log in or sign up to chat...
               </span>
             </div>
-            <span className="shrink-0 font-display text-[11px] font-bold uppercase text-[#E31E24] dark:text-[#F7D117]">
+            <span className="shrink-0 font-display text-[14px] font-bold uppercase text-[#E31E24] dark:text-[#F7D117]">
               Log In →
             </span>
           </button>

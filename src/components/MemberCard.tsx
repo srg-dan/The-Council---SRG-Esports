@@ -151,7 +151,7 @@ export const MemberCard: React.FC<MemberCardProps> = ({
 
           <div className="mt-2.5 h-2.5 w-full overflow-hidden rounded-full bg-zinc-200 dark:bg-[#121212]">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-[#E31E24] via-[#F7D117] to-[#D4AF37] transition-all duration-300"
+              className="h-full rounded-full bg-[#E31E24] transition-all duration-300"
               style={{ width: `${progressPercent}%` }}
             />
           </div>

@@ -409,7 +409,7 @@ export const HOUSES: House[] = [
       'Born from late-night reflexes and razor-thin engages along the Exp Lane, House Circuit rallies fans who measure excellence in milliseconds.',
     totalPoints: 0,
     memberCount: 0,
-    accentColor: '#F97316',
+    accentColor: '#16A34A',
     rankDelta: 0,
   },
   {
@@ -424,7 +424,7 @@ export const HOUSES: House[] = [
       'Architects of macro control and deck-building discipline. House Sigil unites tacticians, roamer mains, and TCG collectors across Petaling Jaya.',
     totalPoints: 0,
     memberCount: 0,
-    accentColor: '#A855F7',
+    accentColor: '#7C3AED',
     rankDelta: 0,
   },
   {
@@ -439,7 +439,7 @@ export const HOUSES: House[] = [
       'Built on stamina, morning discipline, and unwavering grit through five-game series. House Stride bridges esports focus with active Klang Valley living.',
     totalPoints: 0,
     memberCount: 0,
-    accentColor: '#10B981',
+    accentColor: '#F97316',
     rankDelta: 0,
   },
   {
@@ -454,7 +454,7 @@ export const HOUSES: House[] = [
       'Storytellers, cinema buffs, and watch-party hosts who keep the spirit of Selangor Red Giants alive between tournament splits.',
     totalPoints: 0,
     memberCount: 0,
-    accentColor: '#F59E0B',
+    accentColor: '#EAB308',
     rankDelta: 0,
   },
   {
@@ -469,7 +469,7 @@ export const HOUSES: House[] = [
       'Musicians, vocalists, and arena chanters whose rhythm fuels SRG entrances from Subang Jaya to international stages.',
     totalPoints: 0,
     memberCount: 0,
-    accentColor: '#06B6D4',
+    accentColor: '#10B981',
     rankDelta: 0,
   },
 ];

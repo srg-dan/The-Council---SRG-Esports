@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { CalendarDays, Check, Quote, Users } from 'lucide-react';
 import type { CouncilEvent, House, HouseId, UserProfile } from '../types/council.ts';
-import { HouseCrest } from './CouncilIcons.tsx';
+import { HouseCrest, WardenLabel } from './CouncilIcons.tsx';
 
 interface HousesViewProps {
   houses: House[];
@@ -82,7 +82,7 @@ export const HousesView: React.FC<HousesViewProps> = ({
                     )}
                   </div>
                   <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
-                    Domain: {house.domain} · Warden {house.wardenName}
+                    Domain: {house.domain} · <WardenLabel wardenName={house.wardenName} prefix="Warden " />
                   </p>
                   <div className="mt-2.5 flex items-center justify-between gap-2 text-xs">
                     <span className="text-zinc-600 dark:text-zinc-300 truncate">
@@ -114,7 +114,7 @@ export const HousesView: React.FC<HousesViewProps> = ({
                   {selectedHouse.name}
                 </h2>
                 <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-                  Warden {selectedHouse.wardenName} · {selectedHouse.wardenTitle}
+                  <WardenLabel wardenName={selectedHouse.wardenName} prefix="Warden " /> · {selectedHouse.wardenTitle}
                 </p>
               </div>
             </div>
@@ -153,7 +153,7 @@ export const HousesView: React.FC<HousesViewProps> = ({
                   "{selectedHouse.wardenQuote}"
                 </p>
                 <footer className="mt-1.5 text-xs font-medium text-zinc-500 dark:text-zinc-400">
-                  — Warden {selectedHouse.wardenName}, {selectedHouse.name}
+                  — <WardenLabel wardenName={selectedHouse.wardenName} prefix="Warden " />, {selectedHouse.name}
                 </footer>
               </div>
             </blockquote>

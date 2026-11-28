@@ -29,7 +29,13 @@ import {
   updateUserAvatarUrl,
 } from '../services/councilFirebase.ts';
 import type { ThemePreference, UserProfile } from '../types/council.ts';
-import { processAvatarImage } from '../utils/imageCompression.ts';
+import {
+  cropAndCompressAvatar,
+  prepareAvatarCropSource,
+  type AvatarCropSource,
+  type SquareCropRect,
+} from '../utils/imageCompression.ts';
+import { AvatarCropModal } from './AvatarCropModal.tsx';
 import { AvatarSigil, ClassInsignia, HouseCrest } from './CouncilIcons.tsx';
 import { PhoneInputField, splitE164Phone } from './PhoneInputField.tsx';
 
@@ -77,7 +83,13 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
     null
   );
   const [copiedQr, setCopiedQr] = useState(false);
+  const [cropSource, setCropSource] = useState<AvatarCropSource | null>(null);
+  const cropSourceRef = useRef<AvatarCropSource | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    cropSourceRef.current = cropSource;
+  }, [cropSource]);
 
   useEffect(() => {
     const split = splitE164Phone(user.phoneNumber);
@@ -96,6 +108,14 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
       }
     };
   }, [localPreviewUrl]);
+
+  useEffect(() => {
+    return () => {
+      if (cropSourceRef.current) {
+        URL.revokeObjectURL(cropSourceRef.current.previewUrl);
+      }
+    };
+  }, []);
 
   const house = getHouseById(user.houseId);
   const cls = getClassById(user.classId);
@@ -116,12 +136,42 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
     if (!file) return;
     e.target.value = '';
     setFeedback(null);
+
+    try {
+      const prepared = await prepareAvatarCropSource(file);
+      setCropSource((prev) => {
+        if (prev) URL.revokeObjectURL(prev.previewUrl);
+        return prepared;
+      });
+    } catch (err) {
+      setFeedback({
+        type: 'error',
+        text: err instanceof Error ? err.message : 'Unable to open selected image.',
+      });
+    }
+  };
+
+  const handleCancelCrop = () => {
+    setCropSource((prev) => {
+      if (prev) URL.revokeObjectURL(prev.previewUrl);
+      return null;
+    });
+  };
+
+  const handleConfirmCrop = async (cropRect: SquareCropRect) => {
+    const activeSource = cropSource;
+    if (!activeSource) return;
+
+    setFeedback(null);
     setUploadingPhoto(true);
-    setUploadProgress(15);
+    setUploadProgress(20);
 
     let nextPreview: string | null = null;
     try {
-      const processed = await processAvatarImage(file);
+      const processed = await cropAndCompressAvatar(activeSource.image, cropRect);
+      setCropSource(null);
+      URL.revokeObjectURL(activeSource.previewUrl);
+
       nextPreview = processed.previewUrl;
       setLocalPreviewUrl((prev) => {
         if (prev) URL.revokeObjectURL(prev);
@@ -163,6 +213,8 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
         text: `Profile picture updated (${Math.max(1, Math.round(processed.sizeBytes / 1024))} KB WebP).`,
       });
     } catch (err) {
+      setCropSource(null);
+      URL.revokeObjectURL(activeSource.previewUrl);
       if (nextPreview) {
         URL.revokeObjectURL(nextPreview);
         setLocalPreviewUrl(null);
@@ -329,7 +381,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             <section className="rounded-3xl border border-[#D4AF37]/40 bg-white dark:bg-gradient-to-br dark:from-[#211518] dark:via-[#18181E] dark:to-[#121212] p-5 sm:p-6 shadow-sm dark:shadow-none">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="font-display h-[16px] text-[20px] font-semibold text-[#E31E24]">
+                  <p className="font-display text-[23px] leading-tight font-semibold text-[#E31E24]">
                     Official Member QR Pass
                   </p>
                   <h2 className="font-display text-xl font-bold text-zinc-900 dark:text-white mt-0.5">
@@ -670,6 +722,11 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           </div>
         </form>
       </div>
+      <AvatarCropModal
+        source={cropSource}
+        onCancel={handleCancelCrop}
+        onConfirm={handleConfirmCrop}
+      />
     </div>
   );
 };

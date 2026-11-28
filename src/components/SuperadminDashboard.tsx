@@ -21,6 +21,7 @@ import type {
   UserProfile,
   UserRole,
 } from '../types/council.ts';
+import { WardenLabel } from './CouncilIcons.tsx';
 
 interface SuperadminDashboardProps {
   allUsers: UserProfile[];
@@ -785,7 +786,7 @@ export const SuperadminDashboard: React.FC<SuperadminDashboardProps> = ({
                           {evt.title}
                         </h4>
                         <p className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate mt-0.5">
-                          {house ? house.name : 'All Houses'} · Warden {evt.wardenName}
+                          {house ? house.name : 'All Houses'} · <WardenLabel wardenName={evt.wardenName} prefix="Warden " />
                         </p>
                         <p className="font-mono text-[11px] text-[#E31E24] dark:text-[#F7D117] tabular-nums mt-0.5">
                           +{evt.checkInPoints} pts · {evt.bookedCount}/{evt.capacity} seats

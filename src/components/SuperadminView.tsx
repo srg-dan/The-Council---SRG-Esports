@@ -35,7 +35,7 @@ import type {
   UserProfile,
   UserRole,
 } from '../types/council.ts';
-import { AvatarSigil, HouseCrest } from './CouncilIcons.tsx';
+import { AvatarSigil, HouseCrest, WardenLabel } from './CouncilIcons.tsx';
 import { SuperadminDashboard } from './SuperadminDashboard.tsx';
 
 interface SuperadminViewProps {
@@ -869,7 +869,7 @@ export const SuperadminView: React.FC<SuperadminViewProps> = ({
                             {evt.title}
                           </h3>
                           <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate">
-                            {evt.date} · {evt.location} · Warden {evt.wardenName}
+                            {evt.date} · {evt.location} · <WardenLabel wardenName={evt.wardenName} prefix="Warden " />
                           </p>
                           <p className="font-mono text-[11px] text-[#E31E24] dark:text-[#F7D117] mt-0.5 truncate">
                             +{evt.checkInPoints} pts · {evt.bookedCount}/{evt.capacity} seats ·{' '}

@@ -4,7 +4,7 @@ import { AVATAR_PRESETS, CLASSES, HOUSES, getClassById, getHouseById } from '../
 import { ADMIN_EMAIL } from '../firebase.ts';
 import { normalizePhone, sanitizeUsername } from '../services/councilFirebase.ts';
 import type { ClassId, HouseId, UserProfile } from '../types/council.ts';
-import { AvatarSigil, ClassInsignia, HouseCrest } from './CouncilIcons.tsx';
+import { AvatarSigil, ClassInsignia, HouseCrest, WardenLabel } from './CouncilIcons.tsx';
 import { PhoneInputField, splitE164Phone } from './PhoneInputField.tsx';
 
 interface OathOnboardingWizardProps {
@@ -296,7 +296,7 @@ export const OathOnboardingWizard: React.FC<OathOnboardingWizardProps> = ({
                       {house.name}
                     </h3>
                     <p className="mt-0.5 text-[11px] text-zinc-500 dark:text-zinc-400">
-                      Domain: {house.domain} · Warden {house.wardenName}
+                      Domain: {house.domain} · <WardenLabel wardenName={house.wardenName} prefix="Warden " />
                     </p>
                     <p className="mt-2 text-xs text-zinc-700 dark:text-zinc-300 leading-relaxed line-clamp-3">
                       {house.description}
